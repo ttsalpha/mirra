@@ -36,7 +36,8 @@
     "build": "node build.mjs && node scripts/stage-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "pnpm -w run build"
+    "prepublishOnly": "pnpm -w run build",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

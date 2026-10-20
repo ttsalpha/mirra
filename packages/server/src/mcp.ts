@@ -25,9 +25,14 @@ export function createMcpServer(bridge: PluginBridge): McpServer {
   registerFind(server, bridge);
   registerDefine(server, bridge);
 
-  // Arbitrary code against the open document, so it stays opt-in.
-  if (process.env["MIRRA_ALLOW_EXEC"]) registerExec(server, bridge);
+  // Arbitrary code against the open document, so it stays opt-in. A client that
+  // renders a checkbox into the environment sends "false", which is not "unset".
+  if (isOn(process.env["MIRRA_ALLOW_EXEC"])) registerExec(server, bridge);
   return server;
 }
 
 export { describeError } from "./tools/text.js";
+
+function isOn(value: string | undefined): boolean {
+  return value !== undefined && value !== "" && value !== "false" && value !== "0";
+}
