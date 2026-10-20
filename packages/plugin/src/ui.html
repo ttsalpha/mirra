@@ -7,6 +7,14 @@
         color-scheme: light dark;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 11px;
+        --mark-ink: #101418;
+        --mark-mint: #0fa87c;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --mark-ink: #fff;
+          --mark-mint: #49e3b0;
+        }
       }
       html,
       body {
@@ -26,6 +34,11 @@
         display: flex;
         align-items: center;
         gap: 8px;
+      }
+      .mark {
+        width: 16px;
+        height: 16px;
+        flex: none;
       }
       .dot {
         width: 8px;
@@ -94,6 +107,12 @@
   </head>
   <body>
     <header>
+      <svg class="mark" viewBox="0 0 256 256" aria-hidden="true">
+        <g fill="none" stroke-width="32" stroke-linejoin="round" stroke-linecap="butt">
+          <path d="M48 116V44l80 56 80-56v72" stroke="var(--mark-ink)" />
+          <path d="M48 142v72l80-56 80 56v-72" stroke="var(--mark-mint)" />
+        </g>
+      </svg>
       <span id="dot" class="dot offline"></span>
       <span id="state">Disconnected</span>
       <span id="port">—</span>
