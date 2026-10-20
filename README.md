@@ -59,17 +59,23 @@ pnpm test
 
 Then, once:
 
-1. `node packages/server/dist/index.js init` copies the plugin to `~/.mirra/plugin`
+1. `node packages/server/dist/index.js init`. It copies the plugin to `~/.mirra/plugin`
+   and registers the server with every client it finds: Claude Desktop, Cursor and VS Code
+   by merging one entry into their config, Claude Code through its own CLI. Each file is
+   backed up beside itself first, and `--no-config` skips all of it.
 2. Figma Desktop → Plugins → Development → Import plugin from manifest… →
    `~/.mirra/plugin/manifest.json`
-3. Register the server with your client. For Claude Code, from the repo root:
-   ```sh
-   claude mcp add -s project mirra -- node ./packages/server/dist/index.js serve
-   ```
-4. **Restart the client**, or it will not see the tools
+3. **Restart the clients**, or they will not see the tools
+
+`init` writes the real path of the Node binary running it, because a version manager puts
+`node` behind a path that changes with every shell and a GUI client never sees it.
 
 And once per working session: open a file in Figma, run the Mirra plugin, leave its panel
 open. Figma has no background plugins, so closing the panel ends the connection.
+
+The plugin holds a connection to every server it finds, so several clients can work on the
+same file at once, and one that starts later is picked up within a few seconds. Operations
+run one at a time, so two clients cannot interleave or land in the same undo step.
 
 While iterating: changing plugin code only needs the plugin **run again**, but changing
 `manifest.json` needs it **imported again**.
@@ -87,6 +93,20 @@ which half is broken.
 Without `MIRRA_ROOT`, `mirra_export_assets` writes wherever its `outDir` points and `svg`
 and `image` read whatever path they are given, both relative to the working directory. A
 client that starts the server outside a project, Claude Desktop among them, should set it.
+
+## Claude Desktop
+
+`init` covers Desktop, but a bundle is less work for anyone who would rather not run a
+terminal at all:
+
+```sh
+pnpm --filter mirra build:mcpb
+npx @anthropic-ai/mcpb pack packages/server/mcpb
+```
+
+The resulting `.mcpb` installs with one double-click, runs on Desktop's own Node, and turns
+the port, the project folder and the code execution switch into a form rather than
+environment variables. Figma Desktop and the plugin import are still required.
 
 ## Running arbitrary code
 
