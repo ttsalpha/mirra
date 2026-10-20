@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DEFAULT_PORT, PORT_RANGE_END } from "@mirra/schema";
+import { registerWithClients, serverEntryPoint } from "./clients.js";
 import { installPlugin, isInstalled, PLUGIN_HOME, reveal } from "./install.js";
 import { createMcpServer, describeError } from "./mcp.js";
 import { PluginBridge } from "./transport.js";
@@ -13,6 +14,7 @@ const USAGE = `mirra <command>
 
 Flags:
   --no-reveal   init: do not open the folder in Finder
+  --no-config   init: do not touch any client's configuration
 
 Environment:
   MIRRA_PORT   Bind this exact port instead of scanning ${DEFAULT_PORT}-${PORT_RANGE_END}
@@ -62,21 +64,29 @@ async function serve(): Promise<void> {
 
 async function init(): Promise<void> {
   const { manifest } = await installPlugin();
-  if (!process.argv.includes("--no-reveal")) reveal(manifest);
+  const lines = [`Plugin installed at ${PLUGIN_HOME}`, ""];
 
-  console.log(
-    [
-      `Plugin installed at ${PLUGIN_HOME}`,
-      "",
-      "Next:",
-      "  1. Figma Desktop -> Plugins -> Development -> Import plugin from manifest...",
-      `     and choose ${manifest}`,
-      "  2. Open a file, run Mirra, and leave the panel open",
-      "  3. Register the server with your client, for example:",
-      "     claude mcp add -s user mirra -- npx -y mirra serve",
-      "  4. Ask it for mirra_ping; the panel badge should turn green",
-    ].join("\n"),
+  if (process.argv.includes("--no-config")) {
+    lines.push("Left every client configuration alone.", "");
+  } else {
+    const reports = await registerWithClients(serverEntryPoint());
+    lines.push("Clients:");
+    for (const report of reports) {
+      lines.push(`  ${report.status.padEnd(8)} ${report.client.padEnd(15)} ${report.detail}`);
+    }
+    lines.push("", "A client that was already running has to be restarted to see the tools.", "");
+  }
+
+  lines.push(
+    "Then, in Figma Desktop:",
+    "  1. Plugins -> Development -> Import plugin from manifest...",
+    `     and choose ${manifest}`,
+    "  2. Open a file, run Mirra, and leave the panel open",
+    "  3. Ask the agent for mirra_ping; the panel badge should turn green",
   );
+
+  if (!process.argv.includes("--no-reveal")) reveal(manifest);
+  console.log(lines.join("\n"));
 }
 
 async function doctor(): Promise<void> {
