@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # Trusted publishing signs the tarball against this workflow, so npm needs
+      # no token and the package carries provenance back to this commit.
+      id-token: write
+      # The bundle is attached to a GitHub release at the end.
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs a newer npm than the one Node ships with.
+      - run: npm install -g npm@latest
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Check the tag against the version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(node -p "require('./packages/server/package.json').version")"
+          test "$tag" = "$version" || {
+            echo "tag $GITHUB_REF_NAME does not match version $version"
+            exit 1
+          }
+
+      - run: npm publish --provenance --access public
+        working-directory: packages/server
+
+      - name: Build the Claude Desktop bundle
+        run: |
+          pnpm --filter mirra build:mcpb
+          npx -y @anthropic-ai/mcpb@2.1.2 pack packages/server/mcpb "mirra-${GITHUB_REF_NAME#v}.mcpb"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: mirra-*.mcpb
+          generate_release_notes: true

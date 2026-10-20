@@ -108,6 +108,16 @@ The resulting `.mcpb` installs with one double-click, runs on Desktop's own Node
 the port, the project folder and the code execution switch into a form rather than
 environment variables. Figma Desktop and the plugin import are still required.
 
+## Releasing
+
+`v1.0.1` style tags publish from CI: the workflow builds from a clean checkout, refuses a
+tag that disagrees with the version in `package.json`, publishes with provenance, and
+attaches the Desktop bundle to the GitHub release.
+
+It uses npm trusted publishing, so there is no token anywhere. That can only be configured
+against a package that already exists, so the first version has to go out from a terminal
+with `npm publish`; everything after it is a tag.
+
 ## Running arbitrary code
 
 `mirra_exec` runs whatever Plugin API code the agent writes against the open document. It
