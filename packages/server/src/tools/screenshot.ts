@@ -4,7 +4,8 @@ import type { PluginBridge } from "../transport.js";
 import { describeError, text } from "./text.js";
 
 const DESCRIPTION = `Export a layer as a PNG and return the image, so the rendered result can be
-checked by eye and corrected with mirra_patch. Defaults to the current selection.`;
+checked by eye and corrected with mirra_patch. Defaults to the current selection. The scale
+is lowered when it has to be, so the longest edge stays within maxEdge, 1200px by default.`;
 
 export function registerScreenshot(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

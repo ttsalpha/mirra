@@ -5,7 +5,8 @@ import { describeError, text } from "./text.js";
 
 const DESCRIPTION = `Read layers out of the open Figma file as the same tree mirra_render takes,
 so a design can be edited or turned into code without learning a second format.
-Reads the current selection unless a nodeId is given.`;
+Reads the current selection unless a nodeId is given, and at most 200 nodes unless limit
+says otherwise, so a large design cannot fill the context in one call.`;
 
 export function registerRead(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
@@ -19,7 +20,9 @@ export function registerRead(server: McpServer, bridge: PluginBridge): void {
       try {
         const result = ReadResult.parse(await bridge.request("read", params));
         const note = result.skipped
-          ? [`${result.skipped} node(s) left out: unsupported type, or past the depth limit`]
+          ? [
+              `${result.skipped} node(s) left out: unsupported type, or past the depth or node limit`,
+            ]
           : [];
         return text([...note, JSON.stringify(result.nodes, null, 2)]);
       } catch (error) {

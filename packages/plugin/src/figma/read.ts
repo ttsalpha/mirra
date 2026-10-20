@@ -12,23 +12,27 @@ import {
 
 export type ReadOutcome = { tree: UINode | null; skipped: number };
 
-/** Inverse of `buildNode`, down to `depth` levels of children. */
+type Budget = { count: number; left: number };
+
+/** Inverse of `buildNode`, bounded by depth and node count. */
 export function readNode(
   node: SceneNode,
   depth: number,
   names: NameIndex = EMPTY_NAMES,
+  limit = Number.MAX_SAFE_INTEGER,
 ): ReadOutcome {
-  const skipped = { count: 0 };
-  const tree = toSpec(node, depth, skipped, names);
-  return { tree, skipped: skipped.count };
+  const budget: Budget = { count: 0, left: limit };
+  const tree = toSpec(node, depth, budget, names);
+  return { tree, skipped: budget.count };
 }
 
-function toSpec(
-  node: SceneNode,
-  depth: number,
-  skipped: { count: number },
-  names: NameIndex,
-): UINode | null {
+function toSpec(node: SceneNode, depth: number, budget: Budget, names: NameIndex): UINode | null {
+  if (budget.left <= 0) {
+    budget.count += 1;
+    return null;
+  }
+  budget.left -= 1;
+
   const svg = node.getPluginData(SVG_FIELD);
   if (svg) return { type: "svg", ...common(node), src: svg };
 
@@ -37,7 +41,7 @@ function toSpec(
 
   switch (node.type) {
     case "FRAME":
-      return frameSpec(node, depth, skipped, names);
+      return frameSpec(node, depth, budget, names);
     case "TEXT":
       return textSpec(node, names);
     case "RECTANGLE":
@@ -47,25 +51,20 @@ function toSpec(
     case "INSTANCE":
       return instanceSpec(node);
     default:
-      skipped.count += 1;
+      budget.count += 1;
       return null;
   }
 }
 
-function frameSpec(
-  node: FrameNode,
-  depth: number,
-  skipped: { count: number },
-  names: NameIndex,
-): UINode {
+function frameSpec(node: FrameNode, depth: number, budget: Budget, names: NameIndex): UINode {
   const children: UINode[] = [];
   if (depth > 0) {
     for (const child of node.children) {
-      const spec = toSpec(child, depth - 1, skipped, names);
+      const spec = toSpec(child, depth - 1, budget, names);
       if (spec) children.push(spec);
     }
   } else if (node.children.length) {
-    skipped.count += node.children.length;
+    budget.count += node.children.length;
   }
 
   return {

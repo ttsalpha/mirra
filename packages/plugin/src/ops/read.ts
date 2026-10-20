@@ -3,6 +3,7 @@ import { readNode } from "../figma/read";
 import { buildNameIndex } from "../figma/tokens";
 
 const DEFAULT_DEPTH = 6;
+const DEFAULT_LIMIT = 200;
 
 export async function read(params: ReadParams): Promise<ReadResult> {
   const targets = params.nodeId ? [await resolve(params.nodeId)] : [...figma.currentPage.selection];
@@ -16,10 +17,14 @@ export async function read(params: ReadParams): Promise<ReadResult> {
   let skipped = 0;
 
   for (const target of targets) {
-    const outcome = readNode(target, params.depth ?? DEFAULT_DEPTH, names);
+    const outcome = readNode(
+      target,
+      params.depth ?? DEFAULT_DEPTH,
+      names,
+      params.limit ?? DEFAULT_LIMIT,
+    );
     skipped += outcome.skipped;
     if (outcome.tree) nodes.push({ id: target.id, tree: outcome.tree });
-    else skipped += 1;
   }
 
   return { nodes, skipped };

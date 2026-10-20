@@ -123,9 +123,11 @@ export const PatchResult = z.object({
 export type PatchResult = z.infer<typeof PatchResult>;
 
 export const ScreenshotParams = z.object({
-  /** Defaults to the current selection, or the page if nothing is selected. */
+  /** Defaults to the current selection. */
   target: Target.optional(),
   scale: z.number().min(0.1).max(4).optional(),
+  /** Longest edge in pixels; the scale is lowered to fit, not refused. */
+  maxEdge: z.number().int().min(64).max(4096).optional(),
 });
 export type ScreenshotParams = z.infer<typeof ScreenshotParams>;
 
@@ -134,6 +136,8 @@ export const ScreenshotResult = z.object({
   name: z.string(),
   width: z.number(),
   height: z.number(),
+  /** What the export used, once maxEdge had its say. */
+  scale: z.number(),
   /** base64 PNG. */
   png: z.string(),
 });
@@ -298,6 +302,8 @@ export const ReadParams = z.object({
   nodeId: z.string().optional(),
   /** How many levels of children to walk. */
   depth: z.number().int().min(0).max(20).optional(),
+  /** Most nodes to return, so one call cannot fill the context. */
+  limit: z.number().int().min(1).max(2000).optional(),
 });
 export type ReadParams = z.infer<typeof ReadParams>;
 

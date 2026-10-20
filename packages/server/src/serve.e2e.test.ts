@@ -221,7 +221,7 @@ function stubResult(op: string) {
     };
   }
   if (op === "screenshot") {
-    return { id: "1:1", name: "Card", width: 320, height: 180, png: "iVBORw==" };
+    return { id: "1:1", name: "Card", width: 320, height: 180, scale: 1, png: "iVBORw==" };
   }
   if (op === "read") {
     return {

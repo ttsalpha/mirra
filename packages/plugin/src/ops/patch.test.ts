@@ -151,3 +151,16 @@ test("screenshot without a target falls back to the selection", async () => {
   fake.page.selection = [];
   await expect(screenshot({})).rejects.toThrow(/Nothing is selected/);
 });
+
+test("a screenshot of a large frame lowers its scale to fit", async () => {
+  const parent = fake.page as unknown as BaseNode & ChildrenMixin;
+  await buildNode({ type: "frame", key: "huge", name: "Huge", w: 4000, h: 1000 }, parent, {});
+
+  const capped = await screenshot({ target: { key: "huge" }, scale: 2 });
+  const roomy = await screenshot({ target: { key: "huge" }, scale: 2, maxEdge: 8000 });
+
+  expect(capped.scale).toBeCloseTo(1200 / 4000, 5);
+  expect(capped.width).toBe(1200);
+  expect(roomy.scale).toBe(2);
+  expect(roomy.width).toBe(8000);
+});

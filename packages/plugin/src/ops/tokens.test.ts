@@ -4,6 +4,7 @@ import { buildNode } from "../figma/build";
 import { installFakeFigma } from "../figma/fake-figma";
 import { readNode } from "../figma/read";
 import { buildNameIndex } from "../figma/tokens";
+import { read } from "./read";
 import { tokens } from "./tokens";
 
 let fake: ReturnType<typeof installFakeFigma>;
@@ -146,4 +147,38 @@ test("a missing component says what is on the page", async () => {
   await expect(build({ type: "instance", component: "Card" })).rejects.toThrow(
     /No component named "Card" on this page\. Found: Button/,
   );
+});
+
+test("a node the DSL cannot express is counted once, not twice", async () => {
+  fake.addComponent("Button");
+  const component = fake.page.children[0] as unknown as { id: string };
+
+  const result = await read({ nodeId: component.id });
+
+  expect(result.nodes).toHaveLength(0);
+  expect(result.skipped).toBe(1);
+});
+
+test("read stops at the node budget and says how many it left", async () => {
+  const parent = fake.page as unknown as BaseNode & ChildrenMixin;
+  const row: UINode = {
+    type: "frame",
+    name: "Row",
+    layout: { dir: "horizontal" },
+    children: Array.from({ length: 10 }, (_, index) => ({
+      type: "rect" as const,
+      name: `Box ${index}`,
+      w: 10,
+      h: 10,
+    })),
+  };
+  const node = await buildNode(row, parent, {});
+
+  const capped = readNode(node, 5, undefined, 4);
+  const whole = readNode(node, 5);
+
+  expect((capped.tree as Extract<UINode, { type: "frame" }>).children).toHaveLength(3);
+  expect(capped.skipped).toBe(7);
+  expect((whole.tree as Extract<UINode, { type: "frame" }>).children).toHaveLength(10);
+  expect(whole.skipped).toBe(0);
 });
