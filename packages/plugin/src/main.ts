@@ -8,18 +8,18 @@ const PLUGIN_VERSION = "1.0.0";
 
 figma.showUI(__html__, { width: 300, height: 300, themeColors: true });
 
-figma.ui.onmessage = async (message: UiToMain) => {
+/** One operation at a time, so two clients cannot interleave or share an undo step. */
+let queue: Promise<unknown> = Promise.resolve();
+
+figma.ui.onmessage = (message: UiToMain) => {
   if (message.kind === "ready") return send(context());
   if (message.kind === "allow-exec") return setExecAllowed(message.value);
+  if (message.kind !== "request") return;
 
-  if (message.kind === "request") {
+  queue = queue.then(async () => {
     try {
-      send({
-        kind: "response",
-        id: message.id,
-        ok: true,
-        result: await runOp(message.op, message.params),
-      });
+      const result = await runOp(message.op, message.params);
+      send({ kind: "response", id: message.id, ok: true, result });
     } catch (error) {
       send({
         kind: "response",
@@ -31,7 +31,7 @@ figma.ui.onmessage = async (message: UiToMain) => {
         },
       });
     }
-  }
+  });
 };
 
 function context(): MainToUi {

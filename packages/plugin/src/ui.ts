@@ -4,16 +4,20 @@ import type { MainToUi, UiToMain } from "./bridge-messages";
 
 const PORTS = Array.from({ length: PORT_RANGE_END - DEFAULT_PORT + 1 }, (_, i) => DEFAULT_PORT + i);
 const CONNECT_TIMEOUT_MS = 5000;
-const RETRY_DELAY_MS = 1500;
+const RESCAN_MS = 5000;
 const MAX_LOGS = 10;
 
 type Status = "offline" | "connecting" | "online";
 
 let context: Extract<MainToUi, { kind: "context" }> | null = null;
-let socket: WebSocket | null = null;
-let status: Status = "offline";
-let connectedPort: number | null = null;
+let scanning = false;
 const logs: string[] = [];
+
+/** Every server that answered, so two clients can drive one Figma file. */
+const sockets = new Map<number, WebSocket>();
+
+/** Which socket asked for what, so the reply goes back to that client alone. */
+const askedBy = new Map<string, WebSocket>();
 
 const dot = element("dot");
 const stateLabel = element("state");
@@ -27,8 +31,9 @@ allowExec.addEventListener("change", () => {
 });
 
 element("reconnect").addEventListener("click", () => {
-  socket?.close();
-  void connect();
+  for (const socket of sockets.values()) socket.close();
+  sockets.clear();
+  void scan();
 });
 
 window.onmessage = (event: MessageEvent) => {
@@ -38,12 +43,17 @@ window.onmessage = (event: MessageEvent) => {
   if (message.kind === "context") {
     const first = context === null;
     context = message;
-    if (first) void connect();
+    if (first) {
+      void scan();
+      setInterval(() => void scan(), RESCAN_MS);
+    }
     return;
   }
 
-  // A reply the sandbox produced for a server request: pass it straight through.
+  // A reply the sandbox produced: pass it straight back to whoever asked.
   const { kind: _kind, ...envelope } = message;
+  const socket = askedBy.get(envelope.id);
+  askedBy.delete(envelope.id);
   socket?.send(JSON.stringify(envelope));
 };
 
@@ -55,102 +65,83 @@ document.addEventListener("securitypolicyviolation", (event) => {
 
 toMain({ kind: "ready" });
 
-/** Tells a blocked local network apart from a blocked WebSocket upgrade. */
-async function probe(port: number): Promise<void> {
-  try {
-    const response = await fetch(`http://localhost:${port}/health`);
-    log(`probe ${port}: http ${response.status}`);
-  } catch (error) {
-    log(`probe ${port}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function connect(): Promise<void> {
-  if (status === "connecting") return;
-  setStatus("connecting", null);
-
-  const winner = await race();
-  if (winner) return attach(winner.socket, winner.port);
-
-  // Figma's renderer opens sockets slowly, so a failed race is worth explaining.
-  await probe(PORTS[0] as number);
-  log("no server found, retrying");
-  setStatus("offline", null);
-  setTimeout(() => void connect(), RETRY_DELAY_MS);
-}
-
 /**
- * Opens every candidate port at once and keeps the first socket to answer.
- * Trying them one at a time makes a slow open look like a missing server.
+ * Opens every port that is not connected yet. Holding all of them at once is
+ * what lets several clients work at the same time, and it means a client that
+ * starts later is picked up on the next pass rather than ignored.
  */
-function race(): Promise<{ socket: WebSocket; port: number } | null> {
+async function scan(): Promise<void> {
+  if (scanning) return;
+  scanning = true;
+  if (!sockets.size) setStatus("connecting");
+
+  try {
+    await Promise.all(PORTS.filter((port) => !sockets.has(port)).map(open));
+  } finally {
+    scanning = false;
+  }
+
+  if (sockets.size) return setStatus("online");
+  await probe(PORTS[0] as number);
+  setStatus("offline");
+}
+
+function open(port: number): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
-    const sockets: WebSocket[] = [];
+    let candidate: WebSocket;
+    try {
+      candidate = new WebSocket(`ws://localhost:${port}`);
+    } catch (error) {
+      log(`cannot open ${port}: ${error instanceof Error ? error.message : String(error)}`);
+      return resolve();
+    }
 
-    const closeAll = (keep: WebSocket | null) => {
-      for (const socket of sockets) if (socket !== keep) socket.close();
-    };
-
-    const timer = setTimeout(() => {
+    const done = () => {
       if (settled) return;
       settled = true;
-      closeAll(null);
-      resolve(null);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      candidate.close();
+      done();
     }, CONNECT_TIMEOUT_MS);
 
-    for (const port of PORTS) {
-      let candidate: WebSocket;
-      try {
-        candidate = new WebSocket(`ws://localhost:${port}`);
-      } catch (error) {
-        log(`cannot open ${port}: ${error instanceof Error ? error.message : String(error)}`);
-        continue;
-      }
-      sockets.push(candidate);
-      candidate.onopen = () => {
-        if (settled) return candidate.close();
-        settled = true;
-        clearTimeout(timer);
-        closeAll(candidate);
-        resolve({ socket: candidate, port });
-      };
-      candidate.onerror = () => {};
-    }
-
-    if (!sockets.length) {
-      clearTimeout(timer);
-      resolve(null);
-    }
+    candidate.onopen = () => {
+      attach(candidate, port);
+      done();
+    };
+    candidate.onerror = () => done();
   });
 }
 
-function attach(candidate: WebSocket, port: number): void {
-  socket = candidate;
-  setStatus("online", port);
+function attach(socket: WebSocket, port: number): void {
+  sockets.set(port, socket);
+  setStatus("online");
   log(`connected on ${port}`);
 
-  candidate.onmessage = (event) => {
+  socket.onmessage = (event) => {
     let envelope: RequestEnvelope;
     try {
       envelope = JSON.parse(String(event.data));
     } catch {
       return log("dropped malformed message");
     }
+    askedBy.set(envelope.id, socket);
     toMain({ kind: "request", id: envelope.id, op: envelope.op, params: envelope.params });
   };
 
-  candidate.onclose = () => {
-    if (socket !== candidate) return;
-    socket = null;
-    log("disconnected");
-    setStatus("offline", null);
-    setTimeout(() => void connect(), RETRY_DELAY_MS);
+  socket.onclose = () => {
+    if (sockets.get(port) !== socket) return;
+    sockets.delete(port);
+    log(`lost ${port}`);
+    setStatus(sockets.size ? "online" : "offline");
   };
 
-  candidate.onerror = () => log("socket error");
+  socket.onerror = () => log(`socket error on ${port}`);
 
-  candidate.send(
+  socket.send(
     JSON.stringify({
       type: "hello",
       protocolVersion: PROTOCOL_VERSION,
@@ -161,16 +152,27 @@ function attach(candidate: WebSocket, port: number): void {
   );
 }
 
-function setStatus(next: Status, port: number | null): void {
-  status = next;
-  connectedPort = port;
+/** Tells a blocked local network apart from a blocked WebSocket upgrade. */
+async function probe(port: number): Promise<void> {
+  try {
+    const response = await fetch(`http://localhost:${port}/health`);
+    log(`probe ${port}: http ${response.status}`);
+  } catch (error) {
+    log(`probe ${port}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function setStatus(next: Status): void {
   dot.className = `dot ${next}`;
-  stateLabel.textContent = {
-    offline: "Disconnected",
-    connecting: "Connecting…",
-    online: "Connected",
-  }[next];
-  portLabel.textContent = connectedPort ? `localhost:${connectedPort}` : "—";
+
+  const ports = [...sockets.keys()].sort((a, b) => a - b);
+  stateLabel.textContent =
+    next === "online"
+      ? `Connected${ports.length > 1 ? ` (${ports.length})` : ""}`
+      : next === "connecting"
+        ? "Connecting…"
+        : "Disconnected";
+  portLabel.textContent = ports.length ? ports.map((port) => `:${port}`).join(" ") : "—";
 }
 
 function log(message: string): void {
