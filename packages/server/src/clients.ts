@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { access, copyFile, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { realpath } from "node:fs/promises";
 
 export type ClientReport = {
@@ -118,12 +118,4 @@ function claudeCode(node: string, entryPoint: string): ClientReport {
     status: "failed",
     detail: (result.stderr || result.stdout || "claude mcp add failed").trim().split("\n")[0] ?? "",
   };
-}
-
-export function serverEntryPoint(): string {
-  return resolve(fileDirectory(), "index.js");
-}
-
-function fileDirectory(): string {
-  return dirname(new URL(import.meta.url).pathname);
 }

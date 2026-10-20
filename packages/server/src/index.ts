@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DEFAULT_PORT, PORT_RANGE_END } from "@mirra/schema";
-import { registerWithClients, serverEntryPoint } from "./clients.js";
-import { installPlugin, isInstalled, PLUGIN_HOME, reveal } from "./install.js";
+import { registerWithClients } from "./clients.js";
+import { installPlugin, installServer, isInstalled, PLUGIN_HOME, reveal } from "./install.js";
 import { createMcpServer, describeError } from "./mcp.js";
 import { PluginBridge } from "./transport.js";
 
@@ -69,7 +69,7 @@ async function init(): Promise<void> {
   if (process.argv.includes("--no-config")) {
     lines.push("Left every client configuration alone.", "");
   } else {
-    const reports = await registerWithClients(serverEntryPoint());
+    const reports = await registerWithClients(await installServer());
     lines.push("Clients:");
     for (const report of reports) {
       lines.push(`  ${report.status.padEnd(8)} ${report.client.padEnd(15)} ${report.detail}`);

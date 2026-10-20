@@ -196,16 +196,6 @@ importers:
         version: 4.6.7
 
   packages/server:
-    dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: 1.32.1
-        version: 1.32.1(zod@4.6.7)
-      ws:
-        specifier: 8.22.0
-        version: 8.22.0
-      zod:
-        specifier: 4.6.7
-        version: 4.6.7
     devDependencies:
       '@mirra/plugin':
         specifier: workspace:*
@@ -213,6 +203,9 @@ importers:
       '@mirra/schema':
         specifier: workspace:*
         version: link:../schema
+      '@modelcontextprotocol/sdk':
+        specifier: 1.32.1
+        version: 1.32.1(zod@4.6.7)
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
@@ -222,6 +215,12 @@ importers:
       esbuild:
         specifier: 0.25.12
         version: 0.25.12
+      ws:
+        specifier: 8.22.0
+        version: 8.22.0
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
 packages:
 

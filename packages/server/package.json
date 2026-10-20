@@ -39,17 +39,16 @@
     "prepublishOnly": "pnpm -w run build",
     "build:mcpb": "node scripts/build-mcpb.mjs"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
-    "ws": "8.22.0",
-    "zod": "4.6.7"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@mirra/plugin": "workspace:*",
     "@mirra/schema": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@types/node": "24.19.2",
     "@types/ws": "8.18.2",
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
   },
   "publishConfig": {
     "access": "public"
