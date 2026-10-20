@@ -2,6 +2,6 @@ packages:
   - packages/*
 saveExact: true
 
-# esbuild needs its install script; pnpm refuses to run any without this list.
-onlyBuiltDependencies:
-  - esbuild
+# esbuild needs its install script; pnpm refuses to run any that is not listed.
+allowBuilds:
+  esbuild: true
