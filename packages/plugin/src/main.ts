@@ -4,7 +4,7 @@ import { readFileKey } from "./file-info";
 import { runOp } from "./ops";
 import { setExecAllowed } from "./ops/exec";
 
-const PLUGIN_VERSION = "1.0.0";
+const PLUGIN_VERSION = "1.1.0";
 
 figma.showUI(__html__, { width: 300, height: 300, themeColors: true });
 

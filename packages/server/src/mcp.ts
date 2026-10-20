@@ -11,7 +11,7 @@ import { registerScreenshot } from "./tools/screenshot.js";
 import { registerTokens } from "./tools/tokens.js";
 import type { PluginBridge } from "./transport.js";
 
-export const SERVER_VERSION = "1.0.0";
+export const SERVER_VERSION = "1.1.0";
 
 export function createMcpServer(bridge: PluginBridge): McpServer {
   const server = new McpServer({ name: "mirra", version: SERVER_VERSION });
