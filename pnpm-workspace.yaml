@@ -1,3 +1,7 @@
 packages:
   - packages/*
 saveExact: true
+
+# esbuild needs its install script; pnpm refuses to run any without this list.
+onlyBuiltDependencies:
+  - esbuild
