@@ -1,3 +1,4 @@
+import { READS } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ReadParams, ReadResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -12,6 +13,7 @@ export function registerRead(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_read",
     {
+      annotations: READS,
       title: "Read Figma layers as a UI tree",
       description: DESCRIPTION,
       inputSchema: ReadParams.shape,

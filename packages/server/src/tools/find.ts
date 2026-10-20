@@ -1,3 +1,4 @@
+import { ADDS, READS } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { FindParams, FindResult, PagesParams, PagesResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -12,7 +13,12 @@ tool works on the current page, so start here when the layer you want is elsewhe
 export function registerFind(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_find",
-    { title: "Find Figma layers", description: FIND, inputSchema: FindParams.shape },
+    {
+      annotations: READS,
+      title: "Find Figma layers",
+      description: FIND,
+      inputSchema: FindParams.shape,
+    },
     async (params) => {
       try {
         const result = FindResult.parse(await bridge.request("find", params));
@@ -33,7 +39,13 @@ export function registerFind(server: McpServer, bridge: PluginBridge): void {
 
   server.registerTool(
     "mirra_pages",
-    { title: "List or switch Figma pages", description: PAGES, inputSchema: PagesParams.shape },
+    {
+      // Not read-only: it can add a page and change which one is current.
+      annotations: ADDS,
+      title: "List, add or switch Figma pages",
+      description: PAGES,
+      inputSchema: PagesParams.shape,
+    },
     async (params) => {
       try {
         const result = PagesResult.parse(await bridge.request("pages", params));

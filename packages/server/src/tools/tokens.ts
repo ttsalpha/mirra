@@ -1,3 +1,4 @@
+import { READS } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { TokensResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -10,7 +11,7 @@ bound to the design system instead of to a hardcoded value.`;
 export function registerTokens(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_tokens",
-    { title: "List design tokens", description: DESCRIPTION },
+    { annotations: READS, title: "List design tokens", description: DESCRIPTION },
     async () => {
       try {
         const result = TokensResult.parse(await bridge.request("tokens"));

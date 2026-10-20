@@ -1,3 +1,4 @@
+import { CHANGES } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ExecParams, ExecResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -10,7 +11,12 @@ The body is an async function receiving \`figma\`; use it only for what the type
 export function registerExec(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_exec",
-    { title: "Run Plugin API code", description: DESCRIPTION, inputSchema: ExecParams.shape },
+    {
+      annotations: CHANGES,
+      title: "Run Plugin API code",
+      description: DESCRIPTION,
+      inputSchema: ExecParams.shape,
+    },
     async (params) => {
       try {
         const result = ExecResult.parse(await bridge.request("exec", params));

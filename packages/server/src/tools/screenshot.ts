@@ -1,3 +1,4 @@
+import { READS } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { ScreenshotParams, ScreenshotResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -11,6 +12,7 @@ export function registerScreenshot(server: McpServer, bridge: PluginBridge): voi
   server.registerTool(
     "mirra_screenshot",
     {
+      annotations: READS,
       title: "Screenshot a Figma layer",
       description: DESCRIPTION,
       inputSchema: ScreenshotParams.shape,

@@ -1,3 +1,4 @@
+import { CHANGES } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PatchParams, PatchResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -13,6 +14,7 @@ export function registerPatch(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_patch",
     {
+      annotations: CHANGES,
       title: "Patch existing Figma layers",
       description: DESCRIPTION,
       inputSchema: PatchParams.shape,

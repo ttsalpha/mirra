@@ -1,3 +1,4 @@
+import { READS } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PingResult } from "@mirra/schema";
 import { SERVER_VERSION } from "../version.js";
@@ -8,6 +9,7 @@ export function registerPing(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_ping",
     {
+      annotations: READS,
       title: "Ping the Figma plugin",
       description:
         "Check that the Mirra plugin is connected, and report the open file, current page and selection size.",

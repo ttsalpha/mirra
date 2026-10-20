@@ -1,3 +1,4 @@
+import { ADDS } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { RenderParams, RenderResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -15,6 +16,7 @@ export function registerRender(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_render",
     {
+      annotations: ADDS,
       title: "Render a UI tree into Figma",
       description: DESCRIPTION,
       inputSchema: RenderParams.shape,

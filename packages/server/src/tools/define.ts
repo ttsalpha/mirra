@@ -1,3 +1,4 @@
+import { CHANGES } from "./annotations.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { DefineParams, DefineResult } from "@mirra/schema";
 import type { PluginBridge } from "../transport.js";
@@ -10,7 +11,12 @@ value keyed by mode name sets one value per mode. Both halves are optional.`;
 export function registerDefine(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_define_tokens",
-    { title: "Define Figma variables", description: DESCRIPTION, inputSchema: DefineParams.shape },
+    {
+      annotations: CHANGES,
+      title: "Define Figma variables",
+      description: DESCRIPTION,
+      inputSchema: DefineParams.shape,
+    },
     async (params) => {
       try {
         const result = DefineResult.parse(await bridge.request("define", params));

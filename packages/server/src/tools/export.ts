@@ -1,3 +1,4 @@
+import { CHANGES } from "./annotations.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { resolveInRoot } from "./paths.js";
@@ -13,6 +14,7 @@ export function registerExport(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(
     "mirra_export_assets",
     {
+      annotations: CHANGES,
       title: "Export Figma layers to files",
       description: DESCRIPTION,
       inputSchema: ExportParams.shape,
