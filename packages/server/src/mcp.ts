@@ -13,7 +13,7 @@ import { registerTokens } from "./tools/tokens.js";
 import type { PluginBridge } from "./transport.js";
 
 export function createMcpServer(bridge: PluginBridge): McpServer {
-  const server = new McpServer({ name: "mirra", version: SERVER_VERSION });
+  const server = new McpServer({ name: "Mirra", version: SERVER_VERSION });
   registerPing(server, bridge);
   registerRender(server, bridge);
   registerRead(server, bridge);

@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "mirra": {
+    "Mirra": {
       "type": "stdio",
       "command": "node",
       "args": ["./packages/server/dist/index.js", "serve"]

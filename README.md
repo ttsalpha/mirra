@@ -108,7 +108,7 @@ the tool when `MIRRA_ALLOW_EXEC` is set, and the plugin only runs it while **All
 execution** is ticked in its panel. The tick resets every time the plugin runs.
 
 ```sh
-claude mcp add -s user mirra-exec -e MIRRA_ALLOW_EXEC=1 -- npx -y @ttsalpha/mirra serve
+claude mcp add -s user Mirra-exec -e MIRRA_ALLOW_EXEC=1 -- npx -y @ttsalpha/mirra serve
 ```
 
 The socket listens on loopback and refuses any browser origin other than Figma's, so a page

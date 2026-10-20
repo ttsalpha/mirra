@@ -50,11 +50,20 @@ test("the entry is merged in, leaving the other servers alone", async () => {
     mcpServers: Record<string, { command: string; args: string[] }>;
     preferences: unknown;
   };
-  expect(Object.keys(config.mcpServers).sort()).toEqual(["mirra", "other"]);
+  expect(Object.keys(config.mcpServers).sort()).toEqual(["Mirra", "other"]);
   expect(config.mcpServers["other"]?.args).toEqual(["-y", "other-mcp"]);
   expect(config.preferences).toEqual({ menuBarEnabled: false });
-  expect(config.mcpServers["mirra"]?.args).toEqual([ENTRY, "serve"]);
+  expect(config.mcpServers["Mirra"]?.args).toEqual([ENTRY, "serve"]);
   expect(reports.find((report) => report.client === "Claude Desktop")?.status).toBe("written");
+});
+
+test("the lowercase entry an older version wrote is replaced, not doubled", async () => {
+  await write(DESKTOP, { mcpServers: { mirra: { command: "stale", args: ["old"] } } });
+
+  await registerWithClients(ENTRY);
+
+  const config = (await read(DESKTOP)) as unknown as { mcpServers: Record<string, unknown> };
+  expect(Object.keys(config.mcpServers)).toEqual(["Mirra"]);
 });
 
 test("the previous file is kept beside the new one", async () => {
@@ -75,7 +84,7 @@ test("VS Code keeps its own shape", async () => {
     servers: Record<string, { type?: string }>;
     inputs: unknown[];
   };
-  expect(config.servers["mirra"]).toMatchObject({ type: "stdio", command: expect.any(String) });
+  expect(config.servers["Mirra"]).toMatchObject({ type: "stdio", command: expect.any(String) });
   expect(config.servers["github"]).toBeDefined();
   expect(config.inputs).toEqual([]);
 });

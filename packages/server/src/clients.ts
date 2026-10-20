@@ -10,7 +10,10 @@ export type ClientReport = {
   detail: string;
 };
 
-const SERVER_NAME = "mirra";
+const SERVER_NAME = "Mirra";
+
+/** What earlier versions wrote, removed so a client does not list it twice. */
+const LEGACY_NAME = "mirra";
 
 /**
  * A version manager puts `node` behind a path that changes with every shell,
@@ -77,6 +80,7 @@ async function writeEntry(target: Target, node: string, entryPoint: string): Pro
     const config = JSON.parse(raw) as Record<string, unknown>;
     const servers = (config[target.key] ?? {}) as Record<string, unknown>;
 
+    delete servers[LEGACY_NAME];
     servers[SERVER_NAME] = {
       ...(target.typed ? { type: "stdio" } : {}),
       command: node,
@@ -105,6 +109,7 @@ function claudeCode(node: string, entryPoint: string): ClientReport {
   if (probe.error)
     return { client: "Claude Code", status: "skipped", detail: "claude not on PATH" };
 
+  spawnSync("claude", ["mcp", "remove", "-s", "user", LEGACY_NAME], { stdio: "ignore" });
   const result = spawnSync(
     "claude",
     ["mcp", "add", "-s", "user", SERVER_NAME, "--", node, entryPoint, "serve"],
