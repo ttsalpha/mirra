@@ -22,7 +22,9 @@ export function registerScreenshot(server: McpServer, bridge: PluginBridge): voi
           content: [
             {
               type: "text" as const,
-              text: `${shot.name} (${shot.width}x${shot.height}, ${shot.id})`,
+              text:
+                `${shot.name} (${shot.width}x${shot.height}, ${shot.id})` +
+                (shot.scale === 1 ? "" : ` at ${shot.scale.toFixed(2)}x`),
             },
             { type: "image" as const, data: shot.png, mimeType: "image/png" },
           ],
