@@ -11,13 +11,6 @@ Claude ⇄ stdio ⇄ MCP server ⇄ ws://localhost:51730 ⇄ plugin iframe ⇄ p
 design and building one, and an agent can write code from that tree without learning a
 second shape.
 
-```sh
-npx @ttsalpha/mirra init
-```
-
-That installs the Figma plugin and registers the server with every client it finds. The
-rest of **Install** below says what is left to do by hand.
-
 ## Requirements
 
 - **Figma Desktop.** A development plugin can only be imported there, so the browser app
@@ -54,27 +47,24 @@ on a corner.
 file and inlines it, then records the path so `mirra_read` names it again rather than
 handing back a data URI.
 
-## Develop
+## Install
 
 ```sh
-pnpm install
-pnpm build          # pnpm --filter @mirra/plugin watch  while working on the plugin
-pnpm test
+npx @ttsalpha/mirra init
 ```
 
-Then, once:
+That copies the plugin to `~/.mirra/plugin` and registers the server with every client it
+finds: Claude Desktop, Cursor and VS Code by merging one entry into their config, Claude
+Code through its own CLI. Each file is backed up beside itself first, and `--no-config`
+skips all of it. The command is written with the real path of the Node binary that ran it,
+because a version manager puts `node` behind a path that changes with every shell and a
+GUI client never sees it.
 
-1. `node packages/server/dist/index.js init`, which is `npx @ttsalpha/mirra init` against
-   the published package. It copies the plugin to `~/.mirra/plugin`
-   and registers the server with every client it finds: Claude Desktop, Cursor and VS Code
-   by merging one entry into their config, Claude Code through its own CLI. Each file is
-   backed up beside itself first, and `--no-config` skips all of it.
-2. Figma Desktop → Plugins → Development → Import plugin from manifest… →
+Then, by hand:
+
+1. Figma Desktop → Plugins → Development → Import plugin from manifest… →
    `~/.mirra/plugin/manifest.json`
-3. **Restart the clients**, or they will not see the tools
-
-`init` writes the real path of the Node binary running it, because a version manager puts
-`node` behind a path that changes with every shell and a GUI client never sees it.
+2. **Restart the clients**, or they will not see the tools
 
 And once per working session: open a file in Figma, run the Mirra plugin, leave its panel
 open. Figma has no background plugins, so closing the panel ends the connection.
@@ -82,9 +72,6 @@ open. Figma has no background plugins, so closing the panel ends the connection.
 The plugin holds a connection to every server it finds, so several clients can work on the
 same file at once, and one that starts later is picked up within a few seconds. Operations
 run one at a time, so two clients cannot interleave or land in the same undo step.
-
-While iterating: changing plugin code only needs the plugin **run again**, but changing
-`manifest.json` needs it **imported again**.
 
 `mirra doctor` checks the port, the installed plugin and the live connection, so it says
 which half is broken.
@@ -102,38 +89,21 @@ client that starts the server outside a project, Claude Desktop among them, shou
 
 ## Claude Desktop
 
-`init` covers Desktop, but a bundle is less work for anyone who would rather not run a
-terminal at all:
-
-```sh
-pnpm --filter @ttsalpha/mirra build:mcpb
-npx @anthropic-ai/mcpb pack packages/server/mcpb
-```
-
-The resulting `.mcpb` installs with one double-click, runs on Desktop's own Node, and turns
-the port, the project folder and the code execution switch into a form rather than
-environment variables. Figma Desktop and the plugin import are still required.
-
-## Releasing
-
-`v1.0.1` style tags publish from CI: the workflow builds from a clean checkout, refuses a
-tag that disagrees with the version in `package.json`, publishes with provenance, and
-attaches the Desktop bundle to the GitHub release.
-
-It uses npm trusted publishing, so there is no token anywhere. That can only be configured
-against a package that already exists, so the first version has to go out from a terminal
-with `npm publish`; everything after it is a tag.
+`init` covers Desktop, but every release also attaches a `.mcpb` bundle, which is less work
+for anyone who would rather not open a terminal. It installs with one double-click, runs on
+Desktop's own Node, and turns the port, the project folder and the code execution switch
+into a form rather than environment variables. Figma Desktop and the plugin import are
+still required.
 
 ## Running arbitrary code
 
 `mirra_exec` runs whatever Plugin API code the agent writes against the open document. It
 takes two keys, which are deliberately held by different people: the server only registers
 the tool when `MIRRA_ALLOW_EXEC` is set, and the plugin only runs it while **Allow code
-execution** is ticked in its panel. The tick resets every time the plugin runs, and this
-repo's `.mcp.json` leaves the variable out.
+execution** is ticked in its panel. The tick resets every time the plugin runs.
 
 ```sh
-claude mcp add -s user mirra-exec -e MIRRA_ALLOW_EXEC=1 -- node /path/to/packages/server/dist/index.js serve
+claude mcp add -s user mirra-exec -e MIRRA_ALLOW_EXEC=1 -- npx -y @ttsalpha/mirra serve
 ```
 
 The socket listens on loopback and refuses any browser origin other than Figma's, so a page
