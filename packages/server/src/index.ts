@@ -2,6 +2,7 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DEFAULT_PORT, PORT_RANGE_END } from "@mirra/schema";
 import { registerWithClients } from "./clients.js";
+import { registerPluginWithFigma } from "./figma-settings.js";
 import { installPlugin, installServer, isInstalled, PLUGIN_HOME, reveal } from "./install.js";
 import { createMcpServer, describeError } from "./mcp.js";
 import { PluginBridge } from "./transport.js";
@@ -13,7 +14,7 @@ const USAGE = `mirra <command>
   doctor   Bind the plugin port and wait for the Figma plugin to connect
 
 Flags:
-  --no-reveal   init: do not open the folder in Finder
+  --no-reveal   init: do not open the folder in Finder on a manual import
   --no-config   init: do not touch any client's configuration
 
 Environment:
@@ -77,15 +78,29 @@ async function init(): Promise<void> {
     lines.push("", "A client that was already running has to be restarted to see the tools.", "");
   }
 
-  lines.push(
-    "Then, in Figma Desktop:",
-    "  1. Plugins -> Development -> Import plugin from manifest...",
-    `     and choose ${manifest}`,
-    "  2. Open a file, run Mirra, and leave the panel open",
-    "  3. Ask the agent for mirra_ping; the panel badge should turn green",
-  );
+  const figma = await registerPluginWithFigma(PLUGIN_HOME);
+  const manual = figma.status === "skipped";
+  if (manual) {
+    lines.push(
+      `Could not register the plugin with Figma Desktop: ${figma.reason}`,
+      "Then, in Figma Desktop:",
+      "  1. Plugins -> Development -> Import plugin from manifest...",
+      `     and choose ${manifest}`,
+      "  2. Open a file, run Mirra, and leave the panel open",
+      "  3. Ask the agent for mirra_ping; the panel badge should turn green",
+    );
+  } else {
+    lines.push(
+      figma.status === "registered"
+        ? "Registered the plugin with Figma Desktop."
+        : "Figma Desktop already knows the plugin.",
+      "Then, in Figma Desktop:",
+      "  1. Open a file, run Plugins -> Development -> Mirra, and leave the panel open",
+      "  2. Ask the agent for mirra_ping; the panel badge should turn green",
+    );
+  }
 
-  if (!process.argv.includes("--no-reveal")) reveal(manifest);
+  if (manual && !process.argv.includes("--no-reveal")) reveal(manifest);
   console.log(lines.join("\n"));
 }
 

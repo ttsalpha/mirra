@@ -65,11 +65,13 @@ skips all of it. The command is written with the real path of the Node binary th
 because a version manager puts `node` behind a path that changes with every shell and a
 GUI client never sees it.
 
-Then, by hand:
+It also registers the plugin with Figma Desktop by writing into Figma's own settings,
+which only works while Figma is **closed** — that file is rewritten from memory on quit.
+If Figma is running, or the format turns out to be one Mirra does not recognise, `init` says
+so and falls back to the manual route: Figma Desktop → Plugins → Development → Import plugin
+from manifest… → `~/.mirra/plugin/manifest.json`.
 
-1. Figma Desktop → Plugins → Development → Import plugin from manifest… →
-   `~/.mirra/plugin/manifest.json`
-2. **Restart the clients**, or they will not see the tools
+Either way, **restart the clients**, or they will not see the tools.
 
 And once per working session: open a file in Figma, run the Mirra plugin, leave its panel
 open. Figma has no background plugins, so closing the panel ends the connection.
