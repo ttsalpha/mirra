@@ -231,6 +231,8 @@ type FakeTextStyle = { id: string; name: string; fontName: FontName; fontSize: n
 
 export type FakeFigma = {
   page: FakePage;
+  pages: FakePage[];
+  current: FakePage;
   undoCommits: number;
   variables: FakeVariable[];
   collections: {
@@ -251,6 +253,8 @@ export function installFakeFigma(): FakeFigma {
   const page = new FakePage();
   const state: FakeFigma = {
     page,
+    pages: [page],
+    current: page,
     undoCommits: 0,
     variables: [],
     collections: [],
@@ -277,10 +281,33 @@ export function installFakeFigma(): FakeFigma {
 
   (globalThis as Record<string, unknown>)["figma"] = {
     mixed: MIXED,
-    currentPage: page,
-    root: { name: "Test file" },
+    get currentPage() {
+      return state.current;
+    },
+    root: {
+      name: "Test file",
+      get children() {
+        return state.pages;
+      },
+    },
     viewport: { center: { x: 0, y: 0 }, scrollAndZoomIntoView: () => {} },
     createFrame: () => track(new FakeFrame()),
+    createPage: () => {
+      const page = new FakePage();
+      page.name = "Page";
+      state.pages.push(page);
+      return page;
+    },
+    setCurrentPageAsync: async (page: FakePage) => {
+      state.current = page;
+    },
+    createComponentFromNode: (node: FakeNode) => {
+      const component = new FakeComponent();
+      component.name = node.name;
+      node.parent?.appendChild(component);
+      node.remove();
+      return track(component);
+    },
     createNodeFromSvg: (markup: string) => {
       const frame = new FakeSvgFrame();
       frame.name = markup.includes("<circle") ? "Circle" : "SVG";

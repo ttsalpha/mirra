@@ -6,8 +6,8 @@ import { describeError, text } from "./text.js";
 const FIND = `Locate layers by name, kind or mirra key, so an existing design can be targeted
 without clicking in Figma first. Searches the current page unless scope is "document".`;
 
-const PAGES = `List the pages of the file, and switch to one by name or id. Every other tool works
-on the current page, so start here when the layer you want is elsewhere.`;
+const PAGES = `List the pages of the file, add one, or switch to one by name or id. Every other
+tool works on the current page, so start here when the layer you want is elsewhere.`;
 
 export function registerFind(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

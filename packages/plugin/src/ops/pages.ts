@@ -3,6 +3,12 @@ import type { PagesParams, PagesResult } from "@mirra/schema";
 export async function pages(params: PagesParams): Promise<PagesResult> {
   await figma.loadAllPagesAsync();
 
+  if (params.create) {
+    const page = figma.createPage();
+    page.name = params.create;
+    await figma.setCurrentPageAsync(page);
+  }
+
   if (params.select) {
     const wanted = figma.root.children.find(
       (page) => page.id === params.select || page.name === params.select,

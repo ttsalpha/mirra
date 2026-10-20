@@ -6,7 +6,8 @@ import { describeError, text } from "./text.js";
 
 const DESCRIPTION = `Change layers that already exist, addressed by the "key" they were rendered with
 (or by Figma node id). Ops are "set" to change properties, "append" to add a child tree,
-"replace" to swap a node for a new tree, and "remove". The whole patch is one undo step.`;
+"replace" to swap a node for a new tree, "move", "component" to turn a node into one, and
+"remove". The whole patch is one undo step.`;
 
 export function registerPatch(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

@@ -1,6 +1,7 @@
 import type { PatchParams, PatchResult } from "@mirra/schema";
 import {
   applyBounds,
+  KEY_FIELD,
   applyConstraints,
   applyProps,
   applySizing,
@@ -48,6 +49,19 @@ export async function patch(params: PatchParams): Promise<PatchResult> {
         node.remove();
         index.invalidate();
         touched.push(created);
+        break;
+      }
+      case "component": {
+        // The node is consumed, so its key moves to the component that replaces it.
+        const key = node.getPluginData(KEY_FIELD);
+        const component = figma.createComponentFromNode(node);
+        component.name = op.name ?? node.name;
+        if (key) {
+          component.setPluginData(KEY_FIELD, key);
+          keys[key] = component.id;
+        }
+        index.invalidate();
+        touched.push(component);
         break;
       }
       case "move": {

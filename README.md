@@ -20,19 +20,19 @@ second shape.
 
 ## Tools
 
-| Tool                  | What it does                                                                     |
-| --------------------- | -------------------------------------------------------------------------------- |
-| `mirra_render`        | Build a whole screen from one declarative tree                                   |
-| `mirra_read`          | Read the selection, or a node, back as that same tree                            |
-| `mirra_patch`         | `set` / `append` / `replace` / `remove` / `move` by stable key, as one undo step |
-| `mirra_find`          | Locate layers by name, kind or key, and select them                              |
-| `mirra_pages`         | List the pages, or switch to one                                                 |
-| `mirra_screenshot`    | Export a layer as PNG and hand the image back                                    |
-| `mirra_tokens`        | List variables and styles, with the `$name` a tree refers to                     |
-| `mirra_define_tokens` | Create or update variables, modes, aliases and paint/text/effect styles          |
-| `mirra_export_assets` | Write layers to disk as PNG or SVG                                               |
-| `mirra_ping`          | Check the connection and report the open file                                    |
-| `mirra_exec`          | Run Plugin API code; see **Running arbitrary code** below                        |
+| Tool                  | What it does                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `mirra_render`        | Build a whole screen from one declarative tree                                          |
+| `mirra_read`          | Read the selection, or a node, back as that same tree                                   |
+| `mirra_patch`         | `set` / `append` / `replace` / `move` / `component` / `remove` by key, as one undo step |
+| `mirra_find`          | Locate layers by name, kind or key, and select them                                     |
+| `mirra_pages`         | List the pages, add one, or switch to one                                               |
+| `mirra_screenshot`    | Export a layer as PNG and hand the image back                                           |
+| `mirra_tokens`        | List variables and styles, with the `$name` a tree refers to                            |
+| `mirra_define_tokens` | Create or update variables, modes, aliases and paint/text/effect styles                 |
+| `mirra_export_assets` | Write layers to disk as PNG or SVG                                                      |
+| `mirra_ping`          | Check the connection and report the open file                                           |
+| `mirra_exec`          | Run Plugin API code; see **Running arbitrary code** below                               |
 
 The tree mirrors flexbox: `layout: {dir, gap, pad, justify, align}`, and `w`/`h` take a
 number, `"fill"` or `"hug"`; a frame with a layout hugs its content by default. Node types

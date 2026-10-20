@@ -4,6 +4,7 @@ import { buildNode } from "../figma/build";
 import { installFakeFigma } from "../figma/fake-figma";
 import { readNode } from "../figma/read";
 import { find } from "./find";
+import { pages } from "./pages";
 import { patch } from "./patch";
 
 let fake: ReturnType<typeof installFakeFigma>;
@@ -57,4 +58,28 @@ test("move puts a child at a new index", async () => {
 
   const tree = readNode(root, 5).tree as Extract<UINode, { type: "frame" }>;
   expect(tree.children?.map((child) => child.name)).toEqual(["Box", "First label", "Second label"]);
+});
+
+test("a page can be added, and it becomes the current one", async () => {
+  const before = fake.pages.length;
+
+  const result = await pages({ create: "Explorations" });
+
+  expect(fake.pages).toHaveLength(before + 1);
+  expect(fake.current.name).toBe("Explorations");
+  expect(result.pages.length).toBeGreaterThan(0);
+});
+
+test("a node becomes a component and keeps the key that addressed it", async () => {
+  const root = await build(row);
+  void root;
+
+  const result = await patch({
+    ops: [{ op: "component", target: { key: "box" }, name: "Box / Default" }],
+  });
+
+  expect(result.keys).toEqual({ box: expect.any(String) });
+
+  const found = await find({ kind: "component" });
+  expect(found.nodes[0]).toMatchObject({ name: "Box / Default", key: "box" });
 });

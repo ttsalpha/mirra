@@ -94,6 +94,12 @@ export const PatchOp = z.discriminatedUnion("op", [
   z.object({ op: z.literal("replace"), target: Target, tree: UINode }),
   z.object({ op: z.literal("remove"), target: Target }),
   z.object({
+    op: z.literal("component"),
+    target: Target,
+    /** Defaults to the node's own name. */
+    name: z.string().optional(),
+  }),
+  z.object({
     op: z.literal("move"),
     target: Target,
     /** Defaults to the node's current parent. */
@@ -176,6 +182,8 @@ export type FindResult = z.infer<typeof FindResult>;
 export const PagesParams = z.object({
   /** Page id or exact name to switch to. */
   select: z.string().optional(),
+  /** Name of a page to add, which then becomes the current one. */
+  create: z.string().optional(),
 });
 export type PagesParams = z.infer<typeof PagesParams>;
 
