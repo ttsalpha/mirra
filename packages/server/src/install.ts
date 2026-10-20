@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, cp, mkdir, readFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,9 +12,11 @@ const DIST = fileURLToPath(new URL(".", import.meta.url));
 const BUNDLED_PLUGIN = resolve(DIST, "plugin");
 
 /** Copies the bundled plugin to a stable path Figma can import from. */
-export async function installPlugin(): Promise<{ manifest: string; version: string }> {
+export async function installPlugin(
+  from: string = BUNDLED_PLUGIN,
+): Promise<{ manifest: string; version: string }> {
   await mkdir(PLUGIN_HOME, { recursive: true });
-  await cp(BUNDLED_PLUGIN, PLUGIN_HOME, { recursive: true });
+  await cp(from, PLUGIN_HOME, { recursive: true });
 
   const manifest = join(PLUGIN_HOME, "manifest.json");
   return { manifest, version: await installedVersion() };
@@ -39,15 +41,21 @@ export async function isInstalled(): Promise<boolean> {
 }
 
 /** An npx cache is cleared and renamed between versions, so a client pointed there breaks. */
-export async function installServer(): Promise<string> {
-  const running = resolve(DIST, "index.js");
-  if (!DIST.includes(`${sep}_npx${sep}`)) return running;
+export function isTransientInstall(directory: string): boolean {
+  return directory.includes(`${sep}_npx${sep}`);
+}
 
+export async function installServer(from: string = DIST): Promise<string> {
+  if (!isTransientInstall(from)) return resolve(from, "index.js");
+
+  const plugin = resolve(from, "plugin");
+  // Wiped first, so an older layout leaves nothing behind.
+  await rm(SERVER_HOME, { recursive: true, force: true });
   await mkdir(SERVER_HOME, { recursive: true });
   // Copying the bundled plugin too would offer Figma a second one to import.
-  await cp(DIST, SERVER_HOME, {
+  await cp(from, SERVER_HOME, {
     recursive: true,
-    filter: (source) => source !== BUNDLED_PLUGIN && !source.startsWith(BUNDLED_PLUGIN + sep),
+    filter: (source) => source !== plugin && !source.startsWith(plugin + sep),
   });
   return join(SERVER_HOME, "index.js");
 }
