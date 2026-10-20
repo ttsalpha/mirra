@@ -16,6 +16,7 @@ await rm(stage, { recursive: true, force: true });
 await mkdir(resolve(stage, "server"), { recursive: true });
 await cp(resolve(root, "dist"), resolve(stage, "server"), { recursive: true });
 await cp(resolve(root, "README.md"), resolve(stage, "README.md"));
+await cp(resolve(root, "../../assets/icon.png"), resolve(stage, "icon.png"));
 
 const manifest = {
   manifest_version: "0.3",
@@ -26,6 +27,7 @@ const manifest = {
   author: { name: "Son Tran @ttsalpha" },
   homepage,
   license: "MIT",
+  icon: "icon.png",
   server: {
     type: "node",
     entry_point: "server/index.js",

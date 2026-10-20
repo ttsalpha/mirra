@@ -1,4 +1,8 @@
-# Mirra
+<p align="center">
+  <img src="https://raw.githubusercontent.com/ttsalpha/mirra/refs/heads/main/assets/icon.png" width="96" height="96" alt="" />
+</p>
+
+<h1 align="center">Mirra</h1>
 
 Two-way MCP server for Figma: an agent reads a design and renders one back through the
 Figma Plugin API, so it needs no REST token and has no per-month call limit.
