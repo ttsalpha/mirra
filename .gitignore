@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.log
+.DS_Store
+*.local.*
+/local
+
+# Copied into the package at build time so npm ships them.
+packages/server/README.md
+packages/server/LICENSE

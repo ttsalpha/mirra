@@ -1,0 +1,26 @@
+{
+  "name": "mirra-workspace",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "3.9.10",
+    "typescript": "7.0.2",
+    "vitest": "3.2.7"
+  },
+  "license": "MIT",
+  "packageManager": "pnpm@12.4.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ttsalpha/mirra.git"
+  }
+}
