@@ -8,6 +8,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { WebSocket } from "ws";
 import { afterEach, expect, test } from "vitest";
 import type { RequestEnvelope } from "@mirra/schema";
+import { SERVER_VERSION } from "./version.js";
 
 const SERVER_ENTRY = fileURLToPath(new URL("../dist/index.js", import.meta.url));
 
@@ -238,7 +239,13 @@ function stubResult(op: string) {
       skipped: 1,
     };
   }
-  return { fileName: "Design file", fileKey: null, currentPage: "Page 1", selectionCount: 2 };
+  return {
+    fileName: "Design file",
+    fileKey: null,
+    currentPage: "Page 1",
+    selectionCount: 2,
+    pluginVersion: SERVER_VERSION,
+  };
 }
 
 function freePort(): Promise<number> {

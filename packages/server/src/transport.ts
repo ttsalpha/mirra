@@ -17,6 +17,17 @@ import { MirraError } from "./errors.js";
 const HOSTS = ["127.0.0.1", "::1"] as const;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/** Figma does the work, so the op decides the wait. */
+const TIMEOUT_MS: Partial<Record<OpName, number>> = {
+  ping: 5_000,
+  pages: 10_000,
+  render: 120_000,
+  patch: 120_000,
+  export: 120_000,
+  define: 60_000,
+  exec: 120_000,
+};
+
 /**
  * WebSockets ignore CORS, so without this any open page could connect, kick the
  * real plugin off and feed the agent invented results. The plugin iframe sends
@@ -32,6 +43,9 @@ export function originAllowed(origin: string | undefined): boolean {
     return false;
   }
 }
+
+const UPDATE_HINT =
+  "Run `npx @ttsalpha/mirra init` to install both halves from the same version, then run the plugin again in Figma.";
 
 const OPEN_PLUGIN_HINT =
   "Open the file in Figma Desktop, then Plugins -> Development -> Mirra, and keep the panel open.";
@@ -57,11 +71,17 @@ export class PluginBridge {
   #servers: WebSocketServer[] = [];
   #socket: WebSocket | null = null;
   #hello: HelloMessage | null = null;
+  #protocolMismatch: string | null = null;
   #port: number | null = null;
   readonly #pending = new Map<string, Pending>();
 
   get status(): BridgeStatus {
     return { port: this.#port, connected: this.#socket !== null, hello: this.#hello };
+  }
+
+  /** Set while a connected plugin speaks a protocol this server does not. */
+  get protocolMismatch(): string | null {
+    return this.#protocolMismatch;
   }
 
   async listen(preferredPort?: number): Promise<number> {
@@ -113,10 +133,14 @@ export class PluginBridge {
     this.#port = null;
   }
 
-  async request(op: OpName, params?: unknown, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<unknown> {
+  async request(op: OpName, params?: unknown, timeoutMs = TIMEOUT_MS[op] ?? DEFAULT_TIMEOUT_MS) {
     const socket = this.#socket;
     if (!socket) {
       throw new MirraError("No Figma plugin is connected", "plugin_offline", OPEN_PLUGIN_HINT);
+    }
+    // ping is how the drift gets diagnosed, so it is the one op still allowed.
+    if (this.#protocolMismatch && op !== "ping") {
+      throw new MirraError(this.#protocolMismatch, "protocol_mismatch", UPDATE_HINT);
     }
 
     const id = randomUUID();
@@ -169,11 +193,11 @@ export class PluginBridge {
     if ("type" in data) {
       if (data.type === "log") return log(`[plugin:${data.level}] ${data.message}`);
       this.#hello = data;
-      if (data.protocolVersion !== PROTOCOL_VERSION) {
-        log(
-          `protocol mismatch: plugin speaks v${data.protocolVersion}, server speaks v${PROTOCOL_VERSION}. Rebuild and re-import the plugin.`,
-        );
-      }
+      this.#protocolMismatch =
+        data.protocolVersion === PROTOCOL_VERSION
+          ? null
+          : `The plugin speaks protocol v${data.protocolVersion}, this server speaks v${PROTOCOL_VERSION}`;
+      if (this.#protocolMismatch) log(this.#protocolMismatch);
       return log(`plugin connected: ${data.fileName} (plugin v${data.pluginVersion})`);
     }
 

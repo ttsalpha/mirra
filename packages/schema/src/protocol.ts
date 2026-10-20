@@ -319,5 +319,6 @@ export const PingResult = z.object({
   fileKey: z.string().nullable(),
   currentPage: z.string(),
   selectionCount: z.number(),
+  pluginVersion: z.string(),
 });
 export type PingResult = z.infer<typeof PingResult>;

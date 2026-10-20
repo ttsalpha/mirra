@@ -30,9 +30,19 @@ afterEach(async () => {
 });
 
 /** Stands in for the plugin's iframe: answers every request with a canned result. */
+/** The greeting is what carries the protocol version, and it arrives on its own. */
+async function untilGreeted(): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (bridge?.status.hello) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("the plugin never greeted the bridge");
+}
+
 async function fakePlugin(
   port: number,
   reply: (envelope: RequestEnvelope) => unknown,
+  protocolVersion = 1,
 ): Promise<WebSocket> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   await new Promise((resolve) => socket.once("open", resolve));
@@ -43,7 +53,7 @@ async function fakePlugin(
   socket.send(
     JSON.stringify({
       type: "hello",
-      protocolVersion: 1,
+      protocolVersion,
       pluginVersion: "0.1.0",
       fileKey: null,
       fileName: "Test file",
@@ -82,6 +92,18 @@ test("moves to the next port when the first one is taken", async () => {
     await new Promise((resolve) => blocker?.close(resolve));
     blocker = null;
   }
+});
+
+test("a plugin on another protocol is refused, except by ping", async () => {
+  bridge = new PluginBridge();
+  const port = await bridge.listen(0);
+  await fakePlugin(port, () => ({ pong: true }), 99);
+  await untilGreeted();
+
+  await expect(bridge.request("render", { tree: {} })).rejects.toMatchObject({
+    code: "protocol_mismatch",
+  });
+  await expect(bridge.request("ping")).resolves.toEqual({ pong: true });
 });
 
 test("times out with a hint when the plugin never answers", async () => {

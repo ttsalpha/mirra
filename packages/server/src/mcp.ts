@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { SERVER_VERSION } from "./version.js";
 import { registerDefine } from "./tools/define.js";
 import { registerExec } from "./tools/exec.js";
 import { registerExport } from "./tools/export.js";
@@ -10,8 +11,6 @@ import { registerRender } from "./tools/render.js";
 import { registerScreenshot } from "./tools/screenshot.js";
 import { registerTokens } from "./tools/tokens.js";
 import type { PluginBridge } from "./transport.js";
-
-export const SERVER_VERSION = "1.1.0";
 
 export function createMcpServer(bridge: PluginBridge): McpServer {
   const server = new McpServer({ name: "mirra", version: SERVER_VERSION });
