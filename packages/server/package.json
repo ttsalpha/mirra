@@ -1,0 +1,53 @@
+{
+  "name": "mirra",
+  "version": "1.0.0",
+  "description": "Two-way MCP server for Figma: read a design and render one back through the Figma Plugin API",
+  "keywords": [
+    "figma",
+    "mcp",
+    "figma-mcp",
+    "figma-plugin",
+    "design-to-code",
+    "claude"
+  ],
+  "license": "MIT",
+  "author": "Son Tran @ttsalpha",
+  "homepage": "https://github.com/ttsalpha/mirra#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ttsalpha/mirra.git",
+    "directory": "packages/server"
+  },
+  "bugs": {
+    "url": "https://github.com/ttsalpha/mirra/issues"
+  },
+  "type": "module",
+  "bin": {
+    "mirra": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "node build.mjs && node scripts/stage-package.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm -w run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@mirra/plugin": "workspace:*",
+    "@mirra/schema": "workspace:*",
+    "@types/node": "24.19.2",
+    "@types/ws": "8.18.2",
+    "esbuild": "0.25.12"
+  }
+}
