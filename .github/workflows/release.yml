@@ -46,7 +46,7 @@ jobs:
 
       - name: Build the Claude Desktop bundle
         run: |
-          pnpm --filter mirra build:mcpb
+          pnpm --filter @ttsalpha/mirra build:mcpb
           npx -y @anthropic-ai/mcpb@2.1.2 pack packages/server/mcpb "mirra-${GITHUB_REF_NAME#v}.mcpb"
 
       - uses: softprops/action-gh-release@v2

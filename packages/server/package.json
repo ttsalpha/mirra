@@ -1,5 +1,5 @@
 {
-  "name": "mirra",
+  "name": "@ttsalpha/mirra",
   "version": "1.0.0",
   "description": "Two-way MCP server for Figma: read a design and render one back through the Figma Plugin API",
   "keywords": [
@@ -50,5 +50,8 @@
     "@types/node": "24.19.2",
     "@types/ws": "8.18.2",
     "esbuild": "0.25.12"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

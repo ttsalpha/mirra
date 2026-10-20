@@ -11,7 +11,12 @@ Claude ⇄ stdio ⇄ MCP server ⇄ ws://localhost:51730 ⇄ plugin iframe ⇄ p
 design and building one, and an agent can write code from that tree without learning a
 second shape.
 
-Not published yet: run it from this repo, as **Develop** below describes.
+```sh
+npx @ttsalpha/mirra init
+```
+
+That installs the Figma plugin and registers the server with every client it finds. The
+rest of **Install** below says what is left to do by hand.
 
 ## Requirements
 
@@ -59,7 +64,8 @@ pnpm test
 
 Then, once:
 
-1. `node packages/server/dist/index.js init`. It copies the plugin to `~/.mirra/plugin`
+1. `node packages/server/dist/index.js init`, which is `npx @ttsalpha/mirra init` against
+   the published package. It copies the plugin to `~/.mirra/plugin`
    and registers the server with every client it finds: Claude Desktop, Cursor and VS Code
    by merging one entry into their config, Claude Code through its own CLI. Each file is
    backed up beside itself first, and `--no-config` skips all of it.
@@ -100,7 +106,7 @@ client that starts the server outside a project, Claude Desktop among them, shou
 terminal at all:
 
 ```sh
-pnpm --filter mirra build:mcpb
+pnpm --filter @ttsalpha/mirra build:mcpb
 npx @anthropic-ai/mcpb pack packages/server/mcpb
 ```
 
