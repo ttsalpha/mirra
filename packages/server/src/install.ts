@@ -44,7 +44,11 @@ export async function installServer(): Promise<string> {
   if (!DIST.includes(`${sep}_npx${sep}`)) return running;
 
   await mkdir(SERVER_HOME, { recursive: true });
-  await cp(DIST, SERVER_HOME, { recursive: true });
+  // Copying the bundled plugin too would offer Figma a second one to import.
+  await cp(DIST, SERVER_HOME, {
+    recursive: true,
+    filter: (source) => source !== BUNDLED_PLUGIN && !source.startsWith(BUNDLED_PLUGIN + sep),
+  });
   return join(SERVER_HOME, "index.js");
 }
 
