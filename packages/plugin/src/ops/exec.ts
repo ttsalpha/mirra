@@ -7,7 +7,8 @@ import type { ExecParams, ExecResult } from "@mirra/schema";
  */
 let allowed = false;
 
-/** Driven by the checkbox in the plugin panel, and off again on every run. */
+/** Driven by the checkbox in the plugin panel; stays on until it is unticked
+ * or the panel closes, since reopening it starts a fresh sandbox. */
 export function setExecAllowed(value: boolean): void {
   allowed = value;
 }
