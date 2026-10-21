@@ -56,11 +56,19 @@ async function serve(): Promise<void> {
   const server = createMcpServer(bridge);
   await server.connect(new StdioServerTransport());
 
+  let closing = false;
   const shutdown = () => {
+    if (closing) return;
+    closing = true;
     void bridge.close().then(() => process.exit(0));
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // A client that goes away without signalling still closes the pipe. Without
+  // this the process lives on and holds its port for the rest of the session.
+  process.stdin.on("end", shutdown);
+  process.stdin.on("close", shutdown);
 }
 
 async function init(): Promise<void> {
