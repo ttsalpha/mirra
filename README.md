@@ -81,6 +81,10 @@ from manifest… → `~/.mirra/plugin/manifest.json`.
 
 Either way, **restart the clients**, or they will not see the tools.
 
+Upgrading is the same command. Half the features live in the plugin, which only changes
+when `init` copies it over, so a new server against an old plugin quietly does less;
+`mirra_ping` says so when the two drift apart.
+
 Every release also attaches a `.mcpb` bundle for anyone who would rather not open a
 terminal: one double-click, Claude Desktop's own Node, and the variables below become a
 form.
