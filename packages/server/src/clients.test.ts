@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { registerWithClients, stableNodePath } from "./clients.js";
+import { registerWithClients, stableNodePath, targets } from "./clients.js";
 
 const ENTRY = "/opt/mirra/dist/index.js";
 
@@ -113,6 +113,24 @@ test("Claude Code is skipped when its CLI is not on PATH", async () => {
     status: "skipped",
     detail: "claude not on PATH",
   });
+});
+
+test("each platform keeps the same folders, under the directory it calls its own", () => {
+  const appData = process.env["APPDATA"];
+  delete process.env["APPDATA"];
+
+  expect(targets("darwin").map((target) => target.file)).toEqual([
+    join(home, DESKTOP),
+    join(home, CURSOR),
+    join(home, VSCODE),
+  ]);
+  expect(targets("win32").map((target) => target.file)).toEqual([
+    join(home, "AppData/Roaming/Claude/claude_desktop_config.json"),
+    join(home, CURSOR),
+    join(home, "AppData/Roaming/Code/User/mcp.json"),
+  ]);
+
+  if (appData !== undefined) process.env["APPDATA"] = appData;
 });
 
 test("the node path written out is a real file, not a shell shim", async () => {

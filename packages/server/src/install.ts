@@ -62,6 +62,7 @@ export async function installServer(from: string = DIST): Promise<string> {
 
 /** Opens the folder so the manifest can be picked in Figma's import dialog. */
 export function reveal(path: string): void {
-  if (platform() !== "darwin") return;
-  spawn("open", ["-R", path], { stdio: "ignore", detached: true }).unref();
+  const open = { stdio: "ignore", detached: true } as const;
+  if (platform() === "darwin") spawn("open", ["-R", path], open).unref();
+  else if (platform() === "win32") spawn("explorer", [`/select,${path}`], open).unref();
 }

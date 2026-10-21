@@ -14,7 +14,7 @@ const USAGE = `mirra <command>
   doctor   Bind the plugin port and wait for the Figma plugin to connect
 
 Flags:
-  --no-reveal   init: do not open the folder in Finder on a manual import
+  --no-reveal   init: do not open the folder on a manual import
   --no-config   init: do not touch any client's configuration
 
 Environment:

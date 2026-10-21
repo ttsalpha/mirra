@@ -18,9 +18,9 @@ second shape.
 ## Requirements
 
 - **Figma Desktop.** A development plugin can only be imported there, so the browser app
-  is out.
+  and Linux (which has no desktop build) are both out.
 - **Node 24 or newer**, and pnpm to build.
-- **macOS.**
+- **macOS or Windows.** Only macOS has been run end to end so far.
 
 ## Tools
 

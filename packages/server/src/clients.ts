@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { access, copyFile, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -27,7 +27,7 @@ export async function stableNodePath(): Promise<string> {
   }
 }
 
-type Target = {
+export type Target = {
   client: string;
   file: string;
   /** VS Code calls the map `servers` and wants a `type`; the others use `mcpServers`. */
@@ -35,18 +35,24 @@ type Target = {
   typed?: boolean;
 };
 
-function targets(): Target[] {
+/** Both platforms lay the same folders out; only the directory above them moves. */
+export function targets(platform: NodeJS.Platform = process.platform): Target[] {
   const home = homedir();
+  const support =
+    platform === "win32"
+      ? (process.env["APPDATA"] ?? join(home, "AppData/Roaming"))
+      : join(home, "Library/Application Support");
+
   return [
     {
       client: "Claude Desktop",
-      file: join(home, "Library/Application Support/Claude/claude_desktop_config.json"),
+      file: join(support, "Claude/claude_desktop_config.json"),
       key: "mcpServers",
     },
     { client: "Cursor", file: join(home, ".cursor/mcp.json"), key: "mcpServers" },
     {
       client: "VS Code",
-      file: join(home, "Library/Application Support/Code/User/mcp.json"),
+      file: join(support, "Code/User/mcp.json"),
       key: "servers",
       typed: true,
     },
@@ -103,18 +109,35 @@ async function writeEntry(target: Target, node: string, entryPoint: string): Pro
   }
 }
 
+/**
+ * On Windows `claude` is a `.cmd` shim, which only runs through a shell, and a
+ * shell joins the arguments into one string without quoting them itself.
+ */
+function runClaude(args: string[]): SpawnSyncReturns<string> {
+  const windows = process.platform === "win32";
+  const quoted = windows ? args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)) : args;
+  return spawnSync("claude", quoted, { stdio: "pipe", encoding: "utf8", shell: windows });
+}
+
 /** Claude Code keeps session state in its config, so its own CLI edits it. */
 function claudeCode(node: string, entryPoint: string): ClientReport {
-  const probe = spawnSync("claude", ["--version"], { stdio: "ignore" });
-  if (probe.error)
+  // Through a shell a missing command is an exit code rather than an error.
+  const probe = runClaude(["--version"]);
+  if (probe.error || probe.status !== 0)
     return { client: "Claude Code", status: "skipped", detail: "claude not on PATH" };
 
-  spawnSync("claude", ["mcp", "remove", "-s", "user", LEGACY_NAME], { stdio: "ignore" });
-  const result = spawnSync(
-    "claude",
-    ["mcp", "add", "-s", "user", SERVER_NAME, "--", node, entryPoint, "serve"],
-    { stdio: "pipe", encoding: "utf8" },
-  );
+  runClaude(["mcp", "remove", "-s", "user", LEGACY_NAME]);
+  const result = runClaude([
+    "mcp",
+    "add",
+    "-s",
+    "user",
+    SERVER_NAME,
+    "--",
+    node,
+    entryPoint,
+    "serve",
+  ]);
 
   if (result.status === 0)
     return { client: "Claude Code", status: "written", detail: "user scope" };
