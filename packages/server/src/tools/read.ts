@@ -7,7 +7,9 @@ import { describeError, text } from "./text.js";
 const DESCRIPTION = `Read layers out of the open Figma file as the same tree mirra_render takes,
 so a design can be edited or turned into code without learning a second format.
 Reads the current selection unless a nodeId is given, and at most 200 nodes unless limit
-says otherwise, so a large design cannot fill the context in one call.`;
+says otherwise, so a large design cannot fill the context in one call.
+Components, component sets, groups and sections read back as frames, and vectors as the
+svg markup that redraws them, so a file someone else designed still comes back whole.`;
 
 export function registerRead(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

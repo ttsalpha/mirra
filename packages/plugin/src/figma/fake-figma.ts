@@ -30,6 +30,8 @@ class FakeNode {
   maxHeight: number | null = null;
   layoutPositioning: "AUTO" | "ABSOLUTE" = "AUTO";
   constraints = { horizontal: "MIN", vertical: "MIN" };
+  rotation = 0;
+  boundVariables: Record<string, { type: string; id: string }> = {};
   layoutSizingVertical: "FIXED" | "HUG" | "FILL" = "FIXED";
   x = 0;
   y = 0;
@@ -43,6 +45,10 @@ class FakeNode {
     this.pluginData[key] = value;
   }
 
+  setBoundVariable(field: string, variable: { id: string }): void {
+    this.boundVariables[field] = { type: "VARIABLE_ALIAS", id: variable.id };
+  }
+
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
@@ -54,7 +60,8 @@ class FakeNode {
     this.removed = true;
   }
 
-  async exportAsync(): Promise<Uint8Array> {
+  async exportAsync(settings?: { format?: string }): Promise<Uint8Array | string> {
+    if (settings?.format === "SVG_STRING") return `<svg data-name="${this.name}" />`;
     return new Uint8Array([137, 80, 78, 71]);
   }
 }
@@ -107,9 +114,33 @@ class FakeEllipse extends FakeNode {
   cornerRadius: number = 0;
 }
 
+class FakeGroup extends FakeNode {
+  readonly type = "GROUP";
+  name = "Group";
+  children: FakeNode[] = [];
+
+  appendChild(child: FakeNode): void {
+    child.parent?.children.splice(child.parent.children.indexOf(child), 1);
+    this.children.push(child);
+    child.parent = this as unknown as FakeFrame;
+  }
+}
+
+class FakeVector extends FakeNode {
+  readonly type = "VECTOR";
+  name = "Vector";
+}
+
+/** A type the DSL has no shape for, and no way to export either. */
+class FakeSlice extends FakeNode {
+  readonly type = "SLICE";
+  name = "Slice";
+}
+
 class FakeComponent extends FakeNode {
   readonly type = "COMPONENT";
   name = "Component";
+  children: FakeNode[] = [];
 
   createInstance(): FakeInstance {
     const instance = new FakeInstance();
@@ -245,6 +276,11 @@ export type FakeFigma = {
   textStyles: FakeTextStyle[];
   paintStyles: { id: string; name: string; paints: unknown[] }[];
   addComponent(name: string): void;
+  /** Cast at the call site: the node classes stay private to this file. */
+  addGroup(name: string): unknown;
+  addVector(name: string): unknown;
+  addSlice(name: string): unknown;
+  addVariable(name: string, type?: string): FakeVariable;
 };
 
 /** Installs the fake on `globalThis` and hands back the page everything lands on. */
@@ -264,6 +300,35 @@ export function installFakeFigma(): FakeFigma {
       const component = new FakeComponent();
       component.name = name;
       page.appendChild(component);
+    },
+    addGroup: (name: string) => {
+      const group = new FakeGroup();
+      group.name = name;
+      page.appendChild(group);
+      return group;
+    },
+    addVector: (name: string) => {
+      const vector = new FakeVector();
+      vector.name = name;
+      page.appendChild(vector);
+      return vector;
+    },
+    addSlice: (name: string) => {
+      const slice = new FakeSlice();
+      slice.name = name;
+      page.appendChild(slice);
+      return slice;
+    },
+    addVariable: (name: string, type = "FLOAT") => {
+      const variable = {
+        id: `v${state.variables.length + 1}`,
+        name,
+        resolvedType: type,
+        variableCollectionId: "c1",
+        valuesByMode: {} as Record<string, unknown>,
+      };
+      state.variables.push(variable);
+      return variable;
     },
   };
 

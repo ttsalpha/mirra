@@ -18,9 +18,9 @@ second shape.
 ## Requirements
 
 - **Figma Desktop.** A development plugin can only be imported there, so the browser app
-  and Linux (which has no desktop build) are both out.
+  is out.
 - **Node 24 or newer**, and pnpm to build.
-- macOS or Windows. Only macOS is tested so far.
+- **macOS.**
 
 ## Tools
 
@@ -41,11 +41,19 @@ second shape.
 The tree mirrors flexbox: `layout: {dir, gap, pad, justify, align}`, and `w`/`h` take a
 number, `"fill"` or `"hug"`; a frame with a layout hugs its content by default. Node types
 are `frame`, `text`, `rect`, `ellipse`, `instance`, `svg` and `image`. Colours are hex
-strings, a gradient, or `"$color/primary"` to bind a variable.
+strings or a gradient. Every node also takes `rotation` in degrees,
+`minW`/`maxW`/`minH`/`maxH`, `constraints: {h, v}` and `at: {x, y}` to pin it: inside an
+auto layout that lifts the node out of the flow, which is how a badge sits on a corner.
 
-Every node also takes `minW`/`maxW`/`minH`/`maxH`, `constraints: {h, v}` and `at: {x, y}` to
-pin it: inside an auto layout that lifts the node out of the flow, which is how a badge sits
-on a corner.
+A `"$name"` follows a variable instead of repeating a value: a colour on `fill`, `stroke`
+or a text `color`, a number on `gap`, `pad`, `radius`, the stroke `width` and a text
+`size`, `lineHeight` or `letterSpacing`. Figma binds the field, so changing the variable
+moves every layer that uses it. `w`/`h` are the exception: they stay numbers.
+
+The DSL has no type of its own for a component, a component set, a group or a section, so
+`mirra_read` hands each back as a frame, and a vector, star, polygon, line or boolean
+operation as the `svg` that redraws it. Rendering that tree makes plain frames again, which
+`mirra_patch` can turn into components.
 
 `svg` and `image` take `src` as inline content or as a path on disk: the server reads the
 file and inlines it, then records the path so `mirra_read` names it again rather than
@@ -59,11 +67,11 @@ npx @ttsalpha/mirra init
 
 That copies the plugin to `~/.mirra/plugin`, the server to `~/.mirra/server` when it is
 running from an npx cache that npm may clear later, and registers the server with every
-client it finds: Claude Desktop, Cursor and VS Code by merging one entry into their config, Claude
-Code through its own CLI. Each file is backed up beside itself first, and `--no-config`
-skips all of it. The command is written with the real path of the Node binary that ran it,
-because a version manager puts `node` behind a path that changes with every shell and a
-GUI client never sees it.
+client it finds: Claude Desktop, Cursor and VS Code by merging one entry into their config,
+Claude Code through its own CLI. Each file is backed up beside itself first, and
+`--no-config` skips all of it. The command is written with the real path of the Node binary
+that ran it, because a version manager puts `node` behind a path that changes with every
+shell and a GUI client never sees it.
 
 It also registers the plugin with Figma Desktop by writing into Figma's own settings,
 which only works while Figma is **closed** — that file is rewritten from memory on quit.
@@ -73,8 +81,14 @@ from manifest… → `~/.mirra/plugin/manifest.json`.
 
 Either way, **restart the clients**, or they will not see the tools.
 
-And once per working session: open a file in Figma, run the Mirra plugin, leave its panel
-open. Figma has no background plugins, so closing the panel ends the connection.
+Every release also attaches a `.mcpb` bundle for anyone who would rather not open a
+terminal: one double-click, Claude Desktop's own Node, and the variables below become a
+form.
+
+## Day to day
+
+Once per working session: open a file in Figma, run the Mirra plugin, leave its panel open.
+Figma has no background plugins, so closing the panel ends the connection.
 
 The plugin holds a connection to every server it finds, so several clients can work on the
 same file at once, and one that starts later is picked up within a few seconds. Operations
@@ -90,17 +104,8 @@ which half is broken.
 | `MIRRA_ALLOW_EXEC`   | Register `mirra_exec` at all; the panel still has to allow it               |
 | `MIRRA_ALLOW_ORIGIN` | Accept one more browser origin on the socket                                |
 
-Without `MIRRA_ROOT`, `mirra_export_assets` writes wherever its `outDir` points and `svg`
-and `image` read whatever path they are given, both relative to the working directory. A
+Without `MIRRA_ROOT`, paths are read and written relative to the working directory, so a
 client that starts the server outside a project, Claude Desktop among them, should set it.
-
-## Claude Desktop
-
-`init` covers Desktop, but every release also attaches a `.mcpb` bundle, which is less work
-for anyone who would rather not open a terminal. It installs with one double-click, runs on
-Desktop's own Node, and turns the port, the project folder and the code execution switch
-into a form rather than environment variables. Figma Desktop and the plugin import are
-still required.
 
 ## Running arbitrary code
 
@@ -137,4 +142,4 @@ when a round fails, which tells a missing server apart from a blocked one.
 
 ## License
 
-[MIT](LICENSE) © 2026 Son Tran @ttsalpha
+[MIT](LICENSE) © 2026 Son Tran [@ttsalpha](https://ttsalpha.com/)

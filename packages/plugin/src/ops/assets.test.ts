@@ -21,7 +21,7 @@ const CIRCLE = '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="5"/></svg>';
 test("an svg node keeps its markup, so read hands the same tree back", async () => {
   const node = await build({ type: "svg", key: "icon", name: "Icon", src: CIRCLE });
 
-  expect(readNode(node, 2).tree).toMatchObject({ type: "svg", key: "icon", src: CIRCLE });
+  expect((await readNode(node, 2)).tree).toMatchObject({ type: "svg", key: "icon", src: CIRCLE });
 });
 
 test("an image node reads back by the path it was inlined from", async () => {
@@ -34,7 +34,7 @@ test("an image node reads back by the path it was inlined from", async () => {
     radius: 8,
   });
 
-  expect(readNode(node, 0).tree).toMatchObject({
+  expect((await readNode(node, 0)).tree).toMatchObject({
     type: "image",
     key: "hero",
     src: "assets/hero.png",
@@ -45,7 +45,7 @@ test("an image node reads back by the path it was inlined from", async () => {
 test("an image starts at its own size", async () => {
   const node = await build({ type: "image", name: "Hero", src: "aGVsbG8=" });
 
-  expect(readNode(node, 0).tree).toMatchObject({ w: 64, h: 64 });
+  expect((await readNode(node, 0)).tree).toMatchObject({ w: 64, h: 64 });
 });
 
 test("define creates a collection, its modes and the variables in it", async () => {

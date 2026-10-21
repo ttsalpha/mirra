@@ -55,7 +55,7 @@ test("a $variable fill is bound, and reads back as the same reference", async ()
   expect(paints[0]?.boundVariables).toEqual({ color: { type: "VARIABLE_ALIAS", id: "v1" } });
 
   const names = await buildNameIndex();
-  expect(readNode(node, 0, names).tree).toEqual(spec);
+  expect((await readNode(node, 0, names)).tree).toEqual(spec);
 });
 
 test("an unknown variable name is refused by name", async () => {
@@ -71,7 +71,7 @@ test("a $text style is applied and reads back", async () => {
   expect((node as unknown as { textStyleId: string }).textStyleId).toBe("s1");
 
   const names = await buildNameIndex();
-  expect(readNode(node, 0, names).tree).toMatchObject({ style: "$text/heading" });
+  expect((await readNode(node, 0, names)).tree).toMatchObject({ style: "$text/heading" });
 });
 
 test("applying a style does not write fontName, which would detach it", async () => {
@@ -99,7 +99,7 @@ test("an instance remembers the component it came from, not its layer name", asy
     properties: { Label: "Save" },
   });
 
-  expect(readNode(node, 0).tree).toMatchObject({ name: "CTA", component: "Button" });
+  expect((await readNode(node, 0)).tree).toMatchObject({ name: "CTA", component: "Button" });
 });
 
 test("tokens lists collections, modes and alias values", async () => {
@@ -124,7 +124,7 @@ test("an instance is created from a component by name, with its properties set",
     properties: { Label: "Save", Disabled: false },
   });
 
-  const tree = readNode(node, 0).tree;
+  const tree = (await readNode(node, 0)).tree;
   expect(tree).toMatchObject({
     type: "instance",
     key: "cta",
@@ -150,13 +150,45 @@ test("a missing component says what is on the page", async () => {
 });
 
 test("a node the DSL cannot express is counted once, not twice", async () => {
-  fake.addComponent("Button");
-  const component = fake.page.children[0] as unknown as { id: string };
+  const slice = fake.addSlice("Export") as { id: string };
 
-  const result = await read({ nodeId: component.id });
+  const result = await read({ nodeId: slice.id });
 
   expect(result.nodes).toHaveLength(0);
   expect(result.skipped).toBe(1);
+});
+
+test("number tokens bind the fields that take them, and read back as references", async () => {
+  fake.addVariable("space/md");
+  fake.addVariable("radius/card");
+  const spec: UINode = {
+    type: "frame",
+    name: "Card",
+    layout: { dir: "vertical", gap: "$space/md", pad: "$space/md" },
+    radius: "$radius/card",
+    stroke: { color: "$color/primary", width: "$space/md" },
+    children: [{ type: "text", name: "Title", text: "Hello", size: "$space/md" }],
+  };
+  const node = await build(spec);
+
+  const bound = (node as unknown as { boundVariables: Record<string, { id: string }> })
+    .boundVariables;
+  expect(bound["itemSpacing"]).toEqual({ type: "VARIABLE_ALIAS", id: "v3" });
+  expect(bound["paddingTop"]).toEqual({ type: "VARIABLE_ALIAS", id: "v3" });
+  expect(bound["topLeftRadius"]).toEqual({ type: "VARIABLE_ALIAS", id: "v4" });
+  expect(bound["strokeWeight"]).toEqual({ type: "VARIABLE_ALIAS", id: "v3" });
+
+  const names = await buildNameIndex();
+  // The frame picks up its own hug sizing on the way back, so this is a subset.
+  expect((await readNode(node, 2, names)).tree).toMatchObject(spec);
+});
+
+test("a radius token needs a node with corners", async () => {
+  fake.addVariable("radius/card");
+
+  await expect(build({ type: "ellipse", w: 10, h: 10, radius: "$radius/card" })).rejects.toThrow(
+    /needs a node with corners/,
+  );
 });
 
 test("read stops at the node budget and says how many it left", async () => {
@@ -174,8 +206,8 @@ test("read stops at the node budget and says how many it left", async () => {
   };
   const node = await buildNode(row, parent, {});
 
-  const capped = readNode(node, 5, undefined, 4);
-  const whole = readNode(node, 5);
+  const capped = await readNode(node, 5, undefined, 4);
+  const whole = await readNode(node, 5);
 
   expect((capped.tree as Extract<UINode, { type: "frame" }>).children).toHaveLength(3);
   expect(capped.skipped).toBe(7);

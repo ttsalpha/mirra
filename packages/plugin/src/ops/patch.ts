@@ -4,6 +4,7 @@ import {
   KEY_FIELD,
   applyConstraints,
   applyProps,
+  applyRotation,
   applySizing,
   buildNode,
   pin,
@@ -27,6 +28,7 @@ export async function patch(params: PatchParams): Promise<PatchResult> {
         applyConstraints(node, op.props);
         applySizing(node, op.props.w, "Horizontal");
         applySizing(node, op.props.h, "Vertical");
+        applyRotation(node, op.props);
         if (op.props.at) deferred.push(() => pin(node, op.props.at));
         touched.push(node);
         break;

@@ -45,17 +45,8 @@ export function gradientTransform(angleDeg: number): Transform {
   ];
 }
 
-export function toStrokes(stroke: Stroke): {
-  paints: Paint[];
-  weight: number;
-  align: "CENTER" | "INSIDE" | "OUTSIDE";
-} {
-  const align = (stroke.align ?? "inside").toUpperCase();
-  return {
-    paints: [solid(stroke.color)],
-    weight: stroke.width ?? 1,
-    align: align as "CENTER" | "INSIDE" | "OUTSIDE",
-  };
+export function toStrokeAlign(align: Stroke["align"]): "CENTER" | "INSIDE" | "OUTSIDE" {
+  return (align ?? "inside").toUpperCase() as "CENTER" | "INSIDE" | "OUTSIDE";
 }
 
 export function toEffects(effects: EffectSpec[]): Effect[] {
@@ -89,13 +80,9 @@ function shadow(effect: Extract<EffectSpec, { type: "shadow" | "inner-shadow" }>
   };
 }
 
-export function toPadding(pad: Padding): {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-} {
-  if (typeof pad === "number") return { top: pad, right: pad, bottom: pad, left: pad };
+/** Generic in the value, because a side may be a number or a "$name" token. */
+export function toPadding<T>(pad: T | [T, T] | [T, T, T, T]): Sides<T> {
+  if (!Array.isArray(pad)) return { top: pad, right: pad, bottom: pad, left: pad };
   if (pad.length === 2) {
     const [vertical, horizontal] = pad;
     return { top: vertical, right: horizontal, bottom: vertical, left: horizontal };
@@ -104,8 +91,10 @@ export function toPadding(pad: Padding): {
   return { top, right, bottom, left };
 }
 
-export function toRadius(radius: Radius): [number, number, number, number] {
-  return typeof radius === "number" ? [radius, radius, radius, radius] : radius;
+export type Sides<T> = { top: T; right: T; bottom: T; left: T };
+
+export function toRadius<T>(radius: T | [T, T, T, T]): [T, T, T, T] {
+  return Array.isArray(radius) ? radius : [radius, radius, radius, radius];
 }
 
 const PRIMARY_AXIS = {
@@ -199,12 +188,7 @@ function fromEffect(effect: Effect): EffectSpec {
   }
 }
 
-export function fromPadding(sides: {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}): Padding | undefined {
+export function fromPadding(sides: Sides<number | string>): Padding | undefined {
   const { top, right, bottom, left } = sides;
   if (top === right && right === bottom && bottom === left) return top === 0 ? undefined : top;
   if (top === bottom && left === right) return [top, right];
@@ -212,10 +196,10 @@ export function fromPadding(sides: {
 }
 
 export function fromRadius(corners: {
-  topLeft: number;
-  topRight: number;
-  bottomRight: number;
-  bottomLeft: number;
+  topLeft: number | string;
+  topRight: number | string;
+  bottomRight: number | string;
+  bottomLeft: number | string;
 }): Radius | undefined {
   const { topLeft, topRight, bottomRight, bottomLeft } = corners;
   if (topLeft === topRight && topRight === bottomRight && bottomRight === bottomLeft) {

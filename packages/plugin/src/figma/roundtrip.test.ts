@@ -17,7 +17,7 @@ async function roundTrip(spec: UINodeSpec): Promise<UINodeSpec> {
   const node = await buildNode(spec, parent, {}, undefined, deferred);
   // The render op flushes these once the tree has its final size.
   for (const place of deferred) place();
-  const outcome = readNode(node, 10);
+  const outcome = await readNode(node, 10);
   expect(outcome.skipped).toBe(0);
   expect(outcome.tree).not.toBeNull();
   return UINode.parse(outcome.tree);
@@ -167,7 +167,7 @@ test("render reports the keys it wrote, and read finds them again", async () => 
   const node = await buildNode(card, parent, keys);
 
   expect(Object.keys(keys)).toEqual(["card", "title"]);
-  const tree = readNode(node, 10).tree as Extract<UINodeSpec, { type: "frame" }>;
+  const tree = (await readNode(node, 10)).tree as Extract<UINodeSpec, { type: "frame" }>;
   expect(tree.key).toBe("card");
   expect(tree.children?.[0]?.key).toBe("title");
 });
@@ -176,7 +176,7 @@ test("depth stops the walk and says how many nodes it left out", async () => {
   const parent = fake.page as unknown as BaseNode & ChildrenMixin;
   const node = await buildNode(card, parent, {});
 
-  const shallow = readNode(node, 0);
+  const shallow = await readNode(node, 0);
   expect(shallow.skipped).toBe(3);
   expect((shallow.tree as Extract<UINodeSpec, { type: "frame" }>).children).toBeUndefined();
 });
@@ -228,4 +228,47 @@ test("a node in the flow reports no placement at all", async () => {
   const child = (result as Extract<UINodeSpec, { type: "frame" }>).children?.[0];
   expect(child).not.toHaveProperty("at");
   expect(child).not.toHaveProperty("constraints");
+});
+
+test("rotation survives the round trip, and is left out when the node is upright", async () => {
+  const spec: UINodeSpec = { type: "rect", name: "Blade", w: 40, h: 8, rotation: -45 };
+
+  expect(await roundTrip(spec)).toEqual(spec);
+  expect(await roundTrip({ type: "rect", name: "Flat", w: 40, h: 8 })).not.toHaveProperty(
+    "rotation",
+  );
+});
+
+test("a group reads back as a frame, with the children it holds", async () => {
+  const group = fake.addGroup("Icons") as SceneNode & ChildrenMixin;
+  const child = await buildNode({ type: "rect", name: "Box", w: 10, h: 10 }, group, {});
+  expect(child.parent).toBe(group);
+
+  const outcome = await readNode(group, 2);
+
+  expect(outcome.skipped).toBe(0);
+  expect(outcome.tree).toMatchObject({
+    type: "frame",
+    name: "Icons",
+    children: [{ type: "rect", name: "Box" }],
+  });
+});
+
+test("a component reads back as a frame rather than being skipped", async () => {
+  fake.addComponent("Button");
+  const component = fake.page.children[0] as unknown as SceneNode;
+
+  const outcome = await readNode(component, 2);
+
+  expect(outcome.skipped).toBe(0);
+  expect(outcome.tree).toMatchObject({ type: "frame", name: "Button" });
+});
+
+test("a vector reads back as the SVG that redraws it", async () => {
+  const vector = fake.addVector("Arrow") as SceneNode;
+
+  const outcome = await readNode(vector, 0);
+
+  expect(outcome.skipped).toBe(0);
+  expect(outcome.tree).toMatchObject({ type: "svg", name: "Arrow", src: /^<svg/ as never });
 });

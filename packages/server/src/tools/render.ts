@@ -9,7 +9,10 @@ const DESCRIPTION = `Build a whole screen in the open Figma file from one declar
 
 The tree mirrors flexbox: a frame carries layout {dir, gap, pad, justify, align}, and a
 child sizes itself with w/h set to a number, "fill" or "hug". Node types are frame, text,
-rect and ellipse. Colours are hex strings; fill also takes {type:"gradient", stops}.
+rect, ellipse, instance, svg and image. Colours are hex strings; fill also takes
+{type:"gradient", stops}. A "$name" binds a variable: a colour on fill, stroke or text
+colour, a number on gap, pad, radius, stroke width, size, lineHeight or letterSpacing.
+Any node takes rotation in degrees, counter-clockwise.
 Give each node you may want to change later a stable "key" and address it from there.`;
 
 export function registerRender(server: McpServer, bridge: PluginBridge): void {

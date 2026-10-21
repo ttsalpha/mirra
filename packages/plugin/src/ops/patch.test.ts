@@ -25,8 +25,8 @@ async function renderCard() {
   return buildNode(card, parent, {});
 }
 
-function treeOf(node: SceneNode) {
-  return readNode(node, 10).tree as Extract<UINode, { type: "frame" }>;
+async function treeOf(node: SceneNode) {
+  return (await readNode(node, 10)).tree as Extract<UINode, { type: "frame" }>;
 }
 
 beforeEach(() => {
@@ -44,7 +44,7 @@ test("set changes properties of a node addressed by key", async () => {
   });
 
   expect(result.applied).toBe(2);
-  const tree = treeOf(root);
+  const tree = await treeOf(root);
   expect(tree.fill).toBe("#fafafa");
   expect(tree.radius).toBe(12);
   expect(tree.children?.[0]).toMatchObject({ text: "Hello again", color: "#111111" });
@@ -65,7 +65,11 @@ test("append adds a child, honouring the index it is given", async () => {
   });
 
   expect(result.keys).toEqual({ badge: expect.any(String) });
-  expect(treeOf(root).children?.map((child) => child.name)).toEqual(["Badge", "Title", "Divider"]);
+  expect((await treeOf(root)).children?.map((child) => child.name)).toEqual([
+    "Badge",
+    "Title",
+    "Divider",
+  ]);
 });
 
 test("replace swaps a node in place and keeps its position", async () => {
@@ -88,7 +92,7 @@ test("replace swaps a node in place and keeps its position", async () => {
     ],
   });
 
-  const children = treeOf(root).children ?? [];
+  const children = (await treeOf(root)).children ?? [];
   expect(children.map((child) => child.name)).toEqual(["Title", "Thick divider"]);
   expect(children[1]).toMatchObject({ h: 4, fill: "#dddddd" });
 });
@@ -98,7 +102,7 @@ test("remove deletes the node, and the key stops resolving", async () => {
 
   await patch({ ops: [{ op: "remove", target: { key: "divider" } }] });
 
-  expect(treeOf(root).children?.map((child) => child.name)).toEqual(["Title"]);
+  expect((await treeOf(root)).children?.map((child) => child.name)).toEqual(["Title"]);
   await expect(patch({ ops: [{ op: "remove", target: { key: "divider" } }] })).rejects.toThrow(
     /No node with key "divider"/,
   );

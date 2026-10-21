@@ -22,12 +22,18 @@ export const GradientFill = z.object({
 /** A reference to a variable or style by name, e.g. "$color/primary". */
 export const TokenRef = z.string().regex(/^\$[\w][\w .\/-]*$/);
 
+/** A number, or "$space/md" to follow a number variable instead. */
+export const NumberValue = z.union([z.number(), TokenRef]);
+
+/** The same, where a negative value would mean nothing. */
+export const SizeValue = z.union([z.number().nonnegative(), TokenRef]);
+
 /** A bare hex string is shorthand for an opaque solid fill. */
 export const Fill = z.union([Hex, TokenRef, SolidFill, GradientFill]);
 
 export const Stroke = z.object({
-  color: Hex,
-  width: z.number().positive().optional(),
+  color: z.union([Hex, TokenRef]),
+  width: SizeValue.optional(),
   align: z.enum(["inside", "outside", "center"]).optional(),
 });
 
@@ -52,14 +58,14 @@ export const Sizing = z.union([z.number().nonnegative(), z.literal("fill"), z.li
 
 /** One value for all sides, [vertical, horizontal], or [top, right, bottom, left]. */
 export const Padding = z.union([
-  z.number(),
-  z.tuple([z.number(), z.number()]),
-  z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  NumberValue,
+  z.tuple([NumberValue, NumberValue]),
+  z.tuple([NumberValue, NumberValue, NumberValue, NumberValue]),
 ]);
 
 export const Layout = z.object({
   dir: z.enum(["horizontal", "vertical"]),
-  gap: z.number().optional(),
+  gap: SizeValue.optional(),
   pad: Padding.optional(),
   /** Along the layout direction. */
   justify: z
@@ -71,10 +77,7 @@ export const Layout = z.object({
 });
 
 /** One number rounds every corner; four go clockwise from the top left. */
-export const Radius = z.union([
-  z.number().nonnegative(),
-  z.tuple([z.number(), z.number(), z.number(), z.number()]),
-]);
+export const Radius = z.union([SizeValue, z.tuple([SizeValue, SizeValue, SizeValue, SizeValue])]);
 
 export const ConstraintSide = z.enum(["min", "center", "max", "stretch", "scale"]);
 
@@ -86,6 +89,8 @@ const base = {
   h: Sizing.optional(),
   opacity: z.number().min(0).max(1).optional(),
   visible: z.boolean().optional(),
+  /** Degrees, counter-clockwise, the way Figma's own rotation field reads. */
+  rotation: z.number().optional(),
   /** Bounds for a node that fills or hugs. */
   minW: z.number().nonnegative().optional(),
   maxW: z.number().nonnegative().optional(),
@@ -106,10 +111,10 @@ const painted = {
 
 const typography = {
   font: z.object({ family: z.string(), style: z.string().optional() }).optional(),
-  size: z.number().positive().optional(),
+  size: SizeValue.optional(),
   /** A number is px; "auto" leaves Figma's automatic line height. */
-  lineHeight: z.union([z.number().positive(), z.literal("auto")]).optional(),
-  letterSpacing: z.number().optional(),
+  lineHeight: z.union([SizeValue, z.literal("auto")]).optional(),
+  letterSpacing: NumberValue.optional(),
   align: z.enum(["left", "center", "right", "justify"]).optional(),
   color: Fill.optional(),
   /** A text style by name, e.g. "$text/heading". Overridden by the fields above. */
@@ -201,6 +206,8 @@ export const UINode: z.ZodType<UINode> = z.discriminatedUnion("type", [
 ]);
 
 export type Hex = z.infer<typeof Hex>;
+export type NumberValue = z.infer<typeof NumberValue>;
+export type SizeValue = z.infer<typeof SizeValue>;
 export type Fill = z.infer<typeof Fill>;
 export type Stroke = z.infer<typeof Stroke>;
 export type Effect = z.infer<typeof Effect>;

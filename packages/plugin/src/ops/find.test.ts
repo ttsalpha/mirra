@@ -56,7 +56,7 @@ test("move puts a child at a new index", async () => {
 
   await patch({ ops: [{ op: "move", target: { key: "box" }, index: 0 }] });
 
-  const tree = readNode(root, 5).tree as Extract<UINode, { type: "frame" }>;
+  const tree = (await readNode(root, 5)).tree as Extract<UINode, { type: "frame" }>;
   expect(tree.children?.map((child) => child.name)).toEqual(["Box", "First label", "Second label"]);
 });
 

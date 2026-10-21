@@ -15,18 +15,23 @@ export type ReadOutcome = { tree: UINode | null; skipped: number };
 type Budget = { count: number; left: number };
 
 /** Inverse of `buildNode`, bounded by depth and node count. */
-export function readNode(
+export async function readNode(
   node: SceneNode,
   depth: number,
   names: NameIndex = EMPTY_NAMES,
   limit = Number.MAX_SAFE_INTEGER,
-): ReadOutcome {
+): Promise<ReadOutcome> {
   const budget: Budget = { count: 0, left: limit };
-  const tree = toSpec(node, depth, budget, names);
+  const tree = await toSpec(node, depth, budget, names);
   return { tree, skipped: budget.count };
 }
 
-function toSpec(node: SceneNode, depth: number, budget: Budget, names: NameIndex): UINode | null {
+async function toSpec(
+  node: SceneNode,
+  depth: number,
+  budget: Budget,
+  names: NameIndex,
+): Promise<UINode | null> {
   if (budget.left <= 0) {
     budget.count += 1;
     return null;
@@ -40,8 +45,6 @@ function toSpec(node: SceneNode, depth: number, budget: Budget, names: NameIndex
   if (src) return { type: "image", ...common(node), ...painted(node, names), src };
 
   switch (node.type) {
-    case "FRAME":
-      return frameSpec(node, depth, budget, names);
     case "TEXT":
       return textSpec(node, names);
     case "RECTANGLE":
@@ -50,54 +53,93 @@ function toSpec(node: SceneNode, depth: number, budget: Budget, names: NameIndex
       return { type: "ellipse", ...common(node), ...painted(node, names) };
     case "INSTANCE":
       return instanceSpec(node);
+    // Containers the DSL has no type of its own for.
+    case "FRAME":
+    case "COMPONENT":
+    case "COMPONENT_SET":
+    case "GROUP":
+    case "SECTION":
+      return frameSpec(node, depth, budget, names);
+    // Shapes with no type either, but which export as the markup that redraws them.
+    case "VECTOR":
+    case "STAR":
+    case "POLYGON":
+    case "LINE":
+    case "BOOLEAN_OPERATION": {
+      const vector = await vectorSpec(node);
+      if (vector) return vector;
+      budget.count += 1;
+      return null;
+    }
     default:
       budget.count += 1;
       return null;
   }
 }
 
-function frameSpec(node: FrameNode, depth: number, budget: Budget, names: NameIndex): UINode {
+/** Rendering the result makes a plain frame, which `patch` can turn back into a component. */
+async function frameSpec(
+  node: SceneNode & ChildrenMixin,
+  depth: number,
+  budget: Budget,
+  names: NameIndex,
+): Promise<UINode> {
   const children: UINode[] = [];
   if (depth > 0) {
     for (const child of node.children) {
-      const spec = toSpec(child, depth - 1, budget, names);
+      const spec = await toSpec(child, depth - 1, budget, names);
       if (spec) children.push(spec);
     }
   } else if (node.children.length) {
     budget.count += node.children.length;
   }
 
+  const layout = layoutSpec(node, names);
+  const clips = (node as Partial<FrameNode>).clipsContent;
+
   return {
     type: "frame",
     ...common(node),
     ...painted(node, names),
-    ...(node.clipsContent ? {} : { clip: false }),
-    ...(layoutSpec(node) ? { layout: layoutSpec(node) } : {}),
+    ...(clips === false ? { clip: false } : {}),
+    ...(layout ? { layout } : {}),
     ...(children.length ? { children } : {}),
   };
 }
 
-function layoutSpec(node: FrameNode): Layout | undefined {
-  if (node.layoutMode === "NONE") return undefined;
+async function vectorSpec(node: SceneNode): Promise<UINode | null> {
+  try {
+    const src = await node.exportAsync({ format: "SVG_STRING" });
+    return { type: "svg", ...common(node), src };
+  } catch {
+    return null;
+  }
+}
+
+function layoutSpec(node: SceneNode, names: NameIndex): Layout | undefined {
+  if (!("layoutMode" in node)) return undefined;
+  const frame = node as FrameNode;
+  if (frame.layoutMode === "NONE") return undefined;
 
   const pad = fromPadding({
-    top: node.paddingTop,
-    right: node.paddingRight,
-    bottom: node.paddingBottom,
-    left: node.paddingLeft,
+    top: boundRef(frame, "paddingTop", names) ?? frame.paddingTop,
+    right: boundRef(frame, "paddingRight", names) ?? frame.paddingRight,
+    bottom: boundRef(frame, "paddingBottom", names) ?? frame.paddingBottom,
+    left: boundRef(frame, "paddingLeft", names) ?? frame.paddingLeft,
   });
+  const gap = boundRef(frame, "itemSpacing", names) ?? frame.itemSpacing;
 
   return {
-    dir: node.layoutMode === "HORIZONTAL" ? "horizontal" : "vertical",
-    ...(node.itemSpacing ? { gap: node.itemSpacing } : {}),
+    dir: frame.layoutMode === "HORIZONTAL" ? "horizontal" : "vertical",
+    ...(gap ? { gap } : {}),
     ...(pad === undefined ? {} : { pad }),
-    ...(node.primaryAxisAlignItems === "MIN"
+    ...(frame.primaryAxisAlignItems === "MIN"
       ? {}
-      : { justify: fromPrimaryAxisAlign(node.primaryAxisAlignItems) }),
-    ...(node.counterAxisAlignItems === "MIN"
+      : { justify: fromPrimaryAxisAlign(frame.primaryAxisAlignItems) }),
+    ...(frame.counterAxisAlignItems === "MIN"
       ? {}
-      : { align: fromCounterAxisAlign(node.counterAxisAlignItems) }),
-    ...(node.layoutWrap === "WRAP" ? { wrap: true } : {}),
+      : { align: fromCounterAxisAlign(frame.counterAxisAlignItems) }),
+    ...(frame.layoutWrap === "WRAP" ? { wrap: true } : {}),
   };
 }
 
@@ -125,24 +167,43 @@ function textSpec(node: TextNode, names: NameIndex): TextSpec {
   const color = fromPaints(node.fills, names);
   const style = typeof node.textStyleId === "string" ? names.style(node.textStyleId) : undefined;
 
+  // A bound variable is the truer answer than the number it happens to resolve to.
+  const size =
+    boundRef(node, "fontSize", names) ??
+    (node.fontSize === figma.mixed ? undefined : node.fontSize);
+  const height =
+    boundRef(node, "lineHeight", names) ??
+    (lineHeight && lineHeight.unit !== "PERCENT"
+      ? lineHeight.unit === "AUTO"
+        ? ("auto" as const)
+        : lineHeight.value
+      : undefined);
+  const spacing =
+    boundRef(node, "letterSpacing", names) ??
+    (letterSpacing && letterSpacing.unit === "PIXELS" && letterSpacing.value !== 0
+      ? letterSpacing.value
+      : undefined);
+
   return {
     type: "text",
     ...common(node),
     text: node.characters,
     ...(style ? { style } : {}),
     ...(font ? { font: { family: font.family, style: font.style } } : {}),
-    ...(node.fontSize === figma.mixed ? {} : { size: node.fontSize }),
-    ...(lineHeight && lineHeight.unit !== "PERCENT"
-      ? { lineHeight: lineHeight.unit === "AUTO" ? ("auto" as const) : lineHeight.value }
-      : {}),
-    ...(letterSpacing && letterSpacing.unit === "PIXELS" && letterSpacing.value !== 0
-      ? { letterSpacing: letterSpacing.value }
-      : {}),
+    ...(size === undefined ? {} : { size }),
+    ...(height === undefined ? {} : { lineHeight: height }),
+    ...(spacing === undefined ? {} : { letterSpacing: spacing }),
     ...(node.textAlignHorizontal === "LEFT"
       ? {}
       : { align: node.textAlignHorizontal.toLowerCase() as TextSpec["align"] }),
     ...(color ? { color } : {}),
   };
+}
+
+function boundRef(node: SceneNode, field: string, names: NameIndex): string | undefined {
+  const bound = (node as SceneNode & { boundVariables?: Record<string, { id?: string }> })
+    .boundVariables?.[field];
+  return bound?.id ? names.variable(bound.id) : undefined;
 }
 
 const CONSTRAINTS_BACK = {
@@ -197,12 +258,14 @@ function placement(node: SceneNode) {
 function common(node: SceneNode) {
   const key = node.getPluginData(KEY_FIELD);
   const blend = node as SceneNode & BlendMixin;
+  const angle = (node as SceneNode & { rotation?: number }).rotation ?? 0;
   return {
     ...(key ? { key } : {}),
     name: node.name,
     ...sizing(node),
     ...bounds(node),
     ...placement(node),
+    ...(angle === 0 ? {} : { rotation: round(angle) }),
     ...(blend.opacity === 1 ? {} : { opacity: blend.opacity }),
     ...(node.visible ? {} : { visible: false }),
   };
@@ -236,13 +299,13 @@ function painted(node: SceneNode, names: NameIndex) {
   const radius =
     "topLeftRadius" in corners
       ? fromRadius({
-          topLeft: corners.topLeftRadius,
-          topRight: corners.topRightRadius,
-          bottomRight: corners.bottomRightRadius,
-          bottomLeft: corners.bottomLeftRadius,
+          topLeft: boundRef(node, "topLeftRadius", names) ?? corners.topLeftRadius,
+          topRight: boundRef(node, "topRightRadius", names) ?? corners.topRightRadius,
+          bottomRight: boundRef(node, "bottomRightRadius", names) ?? corners.bottomRightRadius,
+          bottomLeft: boundRef(node, "bottomLeftRadius", names) ?? corners.bottomLeftRadius,
         })
       : undefined;
-  const stroke = strokeSpec(shape);
+  const stroke = strokeSpec(shape, names);
 
   return {
     ...(fill ? { fill } : {}),
@@ -252,13 +315,16 @@ function painted(node: SceneNode, names: NameIndex) {
   };
 }
 
-function strokeSpec(node: SceneNode & GeometryMixin) {
+function strokeSpec(node: SceneNode & GeometryMixin, names: NameIndex) {
   const paint = Array.isArray(node.strokes) ? node.strokes[0] : undefined;
   if (!paint || paint.type !== "SOLID") return undefined;
 
-  const weight = typeof node.strokeWeight === "number" ? node.strokeWeight : 1;
-  const color = fromPaints([paint]);
+  const color = fromPaints([paint], names);
   if (typeof color !== "string") return undefined;
+
+  const weight =
+    boundRef(node, "strokeWeight", names) ??
+    (typeof node.strokeWeight === "number" ? node.strokeWeight : 1);
 
   return {
     color,

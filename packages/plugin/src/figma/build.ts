@@ -7,7 +7,7 @@ import {
   toPaints,
   toPrimaryAxisAlign,
   toRadius,
-  toStrokes,
+  toStrokeAlign,
 } from "./values";
 
 export const KEY_FIELD = "mirra:key";
@@ -62,6 +62,8 @@ export async function buildNode(
   const fallback = spec.type === "frame" && spec.layout ? "hug" : undefined;
   applySizing(node, spec.w ?? fallback, "Horizontal");
   applySizing(node, spec.h ?? fallback, "Vertical");
+  // After sizing, before the deferred pin: Figma moves x and y when it rotates.
+  applyRotation(node, spec);
   return node;
 }
 
@@ -161,7 +163,7 @@ export async function applyProps(
     if (node.type !== "FRAME") {
       throw new Error(`layout and clip only apply to a frame, not a ${low(node)}`);
     }
-    applyLayout(node, props.layout, props.clip);
+    await applyLayout(node, props.layout, props.clip, tokens);
   }
 
   await applyPaint(node, props, tokens);
@@ -213,13 +215,19 @@ async function applyText(text: TextNode, props: NodeProps, tokens: TokenIndex): 
 
   if (props.text !== undefined) text.characters = props.text;
 
-  if (props.size !== undefined) text.fontSize = props.size;
+  if (props.size !== undefined) await setNumbers(text, { fontSize: props.size }, tokens);
   if (props.lineHeight !== undefined) {
-    text.lineHeight =
-      props.lineHeight === "auto" ? { unit: "AUTO" } : { unit: "PIXELS", value: props.lineHeight };
+    if (props.lineHeight === "auto") text.lineHeight = { unit: "AUTO" };
+    else if (isRef(props.lineHeight)) {
+      await setNumbers(text, { lineHeight: props.lineHeight }, tokens);
+    } else text.lineHeight = { unit: "PIXELS", value: props.lineHeight };
   }
   if (props.letterSpacing !== undefined) {
-    text.letterSpacing = { unit: "PIXELS", value: props.letterSpacing };
+    if (isRef(props.letterSpacing)) {
+      await setNumbers(text, { letterSpacing: props.letterSpacing }, tokens);
+    } else {
+      text.letterSpacing = { unit: "PIXELS", value: props.letterSpacing };
+    }
   }
   if (props.align) {
     text.textAlignHorizontal = props.align.toUpperCase() as TextNode["textAlignHorizontal"];
@@ -231,23 +239,27 @@ async function applyText(text: TextNode, props: NodeProps, tokens: TokenIndex): 
   }
 }
 
-function applyLayout(
+async function applyLayout(
   frame: FrameNode,
   layout: Layout | undefined,
   clip: boolean | undefined,
-): void {
+  tokens: TokenIndex,
+): Promise<void> {
   if (clip !== undefined) frame.clipsContent = clip;
   if (!layout) return;
 
   const { dir, gap, pad, justify, align, wrap } = layout;
   frame.layoutMode = dir === "horizontal" ? "HORIZONTAL" : "VERTICAL";
-  if (gap !== undefined) frame.itemSpacing = gap;
+  if (gap !== undefined) await setNumbers(frame, { itemSpacing: gap }, tokens);
   if (pad !== undefined) {
     const { top, right, bottom, left } = toPadding(pad);
-    frame.paddingTop = top;
-    frame.paddingRight = right;
-    frame.paddingBottom = bottom;
-    frame.paddingLeft = left;
+    const sides = {
+      paddingTop: top,
+      paddingRight: right,
+      paddingBottom: bottom,
+      paddingLeft: left,
+    };
+    await setNumbers(frame, sides, tokens);
   }
   if (wrap !== undefined) frame.layoutWrap = wrap ? "WRAP" : "NO_WRAP";
   if (justify) frame.primaryAxisAlignItems = toPrimaryAxisAlign(justify);
@@ -266,12 +278,12 @@ async function applyPaint(node: SceneNode, props: NodeProps, tokens: TokenIndex)
     shape.fills = isRef(props.fill) ? [await boundPaint(props.fill, tokens)] : toPaints(props.fill);
   }
   if (props.stroke) {
-    const { paints, weight, align } = toStrokes(props.stroke);
-    shape.strokes = paints;
-    shape.strokeWeight = weight;
-    shape.strokeAlign = align;
+    const { color, width, align } = props.stroke;
+    shape.strokes = isRef(color) ? [await boundPaint(color, tokens)] : toPaints(color);
+    shape.strokeAlign = toStrokeAlign(align);
+    await setNumbers(shape, { strokeWeight: width ?? 1 }, tokens);
   }
-  if (props.radius !== undefined) applyRadius(shape, props.radius);
+  if (props.radius !== undefined) await applyRadius(shape, props.radius, tokens);
   if (props.effects) shape.effects = toEffects(props.effects);
 }
 
@@ -319,17 +331,42 @@ function low(node: SceneNode): string {
 }
 
 /** Only rectangles and frames carry per-corner radii; an ellipse has one. */
-function applyRadius(node: CornerMixin, radius: Radius): void {
+async function applyRadius(node: CornerMixin, radius: Radius, tokens: TokenIndex): Promise<void> {
   const [topLeft, topRight, bottomRight, bottomLeft] = toRadius(radius);
   if (!("topLeftRadius" in node)) {
+    if (isRef(topLeft)) {
+      throw new Error("A radius token needs a node with corners; this one takes a number");
+    }
     node.cornerRadius = topLeft;
     return;
   }
-  const corners = node as CornerMixin & RectangleCornerMixin;
-  corners.topLeftRadius = topLeft;
-  corners.topRightRadius = topRight;
-  corners.bottomRightRadius = bottomRight;
-  corners.bottomLeftRadius = bottomLeft;
+  await setNumbers(
+    node,
+    {
+      topLeftRadius: topLeft,
+      topRightRadius: topRight,
+      bottomRightRadius: bottomRight,
+      bottomLeftRadius: bottomLeft,
+    },
+    tokens,
+  );
+}
+
+/** A "$name" binds the field to its variable; anything else is written straight in. */
+async function setNumbers(
+  node: object,
+  fields: Record<string, number | string>,
+  tokens: TokenIndex,
+): Promise<void> {
+  for (const [field, value] of Object.entries(fields)) {
+    if (!isRef(value)) {
+      (node as Record<string, unknown>)[field] = value;
+      continue;
+    }
+    const bindable = node as { setBoundVariable?: (field: string, variable: Variable) => void };
+    if (!bindable.setBoundVariable) throw new Error(`"${field}" cannot follow a variable`);
+    bindable.setBoundVariable(field, await tokens.variable(value));
+  }
 }
 
 const CONSTRAINTS = {
@@ -352,6 +389,11 @@ export function applyBounds(node: SceneNode, props: NodeProps): void {
   if (props.maxW !== undefined) box.maxWidth = props.maxW;
   if (props.minH !== undefined) box.minHeight = props.minH;
   if (props.maxH !== undefined) box.maxHeight = props.maxH;
+}
+
+export function applyRotation(node: SceneNode, props: NodeProps): void {
+  if (props.rotation === undefined) return;
+  (node as SceneNode & { rotation: number }).rotation = props.rotation;
 }
 
 export function applyConstraints(node: SceneNode, props: NodeProps): void {

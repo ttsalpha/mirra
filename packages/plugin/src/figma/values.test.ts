@@ -6,7 +6,7 @@ import {
   toPadding,
   toPaints,
   toRadius,
-  toStrokes,
+  toStrokeAlign,
 } from "./values";
 
 test("expands short hex and reads alpha", () => {
@@ -73,10 +73,8 @@ test("blur effects carry the blur type Figma requires", () => {
   ]);
 });
 
-test("stroke alignment maps to Figma's spelling", () => {
-  expect(toStrokes({ color: "#000000" })).toMatchObject({ weight: 1, align: "INSIDE" });
-  expect(toStrokes({ color: "#000000", align: "outside", width: 2 })).toMatchObject({
-    weight: 2,
-    align: "OUTSIDE",
-  });
+test("stroke alignment maps to Figma's spelling, and defaults to inside", () => {
+  expect(toStrokeAlign(undefined)).toBe("INSIDE");
+  expect(toStrokeAlign("outside")).toBe("OUTSIDE");
+  expect(toStrokeAlign("center")).toBe("CENTER");
 });

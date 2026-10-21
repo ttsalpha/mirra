@@ -17,7 +17,7 @@ export async function read(params: ReadParams): Promise<ReadResult> {
   let skipped = 0;
 
   for (const target of targets) {
-    const outcome = readNode(
+    const outcome = await readNode(
       target,
       params.depth ?? DEFAULT_DEPTH,
       names,
