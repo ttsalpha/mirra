@@ -12,6 +12,7 @@ let path: string | undefined;
 const DESKTOP = "Library/Application Support/Claude/claude_desktop_config.json";
 const CURSOR = ".cursor/mcp.json";
 const VSCODE = "Library/Application Support/Code/User/mcp.json";
+const ANTIGRAVITY = ".gemini/config/mcp_config.json";
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "mirra-clients-"));
@@ -89,6 +90,35 @@ test("VS Code keeps its own shape", async () => {
   expect(config.inputs).toEqual([]);
 });
 
+test("Antigravity merges into mcp_config.json using mcpServers", async () => {
+  await write(ANTIGRAVITY, {
+    mcpServers: { other: { command: "npx", args: ["-y", "other-mcp"] } },
+  });
+
+  const reports = await registerWithClients(ENTRY);
+
+  const config = (await read(ANTIGRAVITY)) as unknown as {
+    mcpServers: Record<string, { command: string; args: string[] }>;
+  };
+  expect(Object.keys(config.mcpServers).sort()).toEqual(["Mirra", "other"]);
+  expect(config.mcpServers["other"]?.args).toEqual(["-y", "other-mcp"]);
+  expect(config.mcpServers["Mirra"]?.args).toEqual([ENTRY, "serve"]);
+  expect(reports.find((report) => report.client === "Antigravity")?.status).toBe("written");
+});
+
+test("an empty config file is populated rather than failing to parse JSON", async () => {
+  const file = await write(ANTIGRAVITY, {});
+  await writeFile(file, "");
+
+  const reports = await registerWithClients(ENTRY);
+
+  const config = (await read(ANTIGRAVITY)) as unknown as {
+    mcpServers: Record<string, { command: string; args: string[] }>;
+  };
+  expect(config.mcpServers["Mirra"]?.args).toEqual([ENTRY, "serve"]);
+  expect(reports.find((report) => report.client === "Antigravity")?.status).toBe("written");
+});
+
 test("a client that is not installed is skipped rather than created", async () => {
   const reports = await registerWithClients(ENTRY);
 
@@ -123,11 +153,13 @@ test("each platform keeps the same folders, under the directory it calls its own
     join(home, DESKTOP),
     join(home, CURSOR),
     join(home, VSCODE),
+    join(home, ANTIGRAVITY),
   ]);
   expect(targets("win32").map((target) => target.file)).toEqual([
     join(home, "AppData/Roaming/Claude/claude_desktop_config.json"),
     join(home, CURSOR),
     join(home, "AppData/Roaming/Code/User/mcp.json"),
+    join(home, ANTIGRAVITY),
   ]);
 
   if (appData !== undefined) process.env["APPDATA"] = appData;

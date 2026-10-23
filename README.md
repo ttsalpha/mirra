@@ -67,7 +67,7 @@ npx @ttsalpha/mirra init
 
 That copies the plugin to `~/.mirra/plugin`, the server to `~/.mirra/server` when it is
 running from an npx cache that npm may clear later, and registers the server with every
-client it finds: Claude Desktop, Cursor and VS Code by merging one entry into their config,
+client it finds: Claude Desktop, Cursor, VS Code and Antigravity by merging one entry into their config,
 Claude Code through its own CLI. Each file is backed up beside itself first, and
 `--no-config` skips all of it. The command is written with the real path of the Node binary
 that ran it, because a version manager puts `node` behind a path that changes with every

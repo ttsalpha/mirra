@@ -56,6 +56,11 @@ export function targets(platform: NodeJS.Platform = process.platform): Target[] 
       key: "servers",
       typed: true,
     },
+    {
+      client: "Antigravity",
+      file: join(home, ".gemini/config/mcp_config.json"),
+      key: "mcpServers",
+    },
   ];
 }
 
@@ -83,7 +88,7 @@ async function writeEntry(target: Target, node: string, entryPoint: string): Pro
 
   try {
     const raw = await readFile(target.file, "utf8");
-    const config = JSON.parse(raw) as Record<string, unknown>;
+    const config = raw.trim() ? (JSON.parse(raw) as Record<string, unknown>) : {};
     const servers = (config[target.key] ?? {}) as Record<string, unknown>;
 
     delete servers[LEGACY_NAME];
@@ -127,6 +132,7 @@ function claudeCode(node: string, entryPoint: string): ClientReport {
     return { client: "Claude Code", status: "skipped", detail: "claude not on PATH" };
 
   runClaude(["mcp", "remove", "-s", "user", LEGACY_NAME]);
+  runClaude(["mcp", "remove", "-s", "user", SERVER_NAME]);
   const result = runClaude([
     "mcp",
     "add",
