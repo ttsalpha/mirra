@@ -5,24 +5,42 @@
 <h1 align="center">Mirra</h1>
 
 Two-way MCP server for Figma: an agent reads a design and renders one back through the
-Figma Plugin API, so it needs no REST token and has no per-month call limit.
+Figma Plugin API, so it needs no REST token and has no monthly call limit.
 
 ```
-Claude ⇄ stdio ⇄ MCP server ⇄ ws://localhost:51730 ⇄ plugin iframe ⇄ plugin sandbox ⇄ Figma
+Claude ⇄ stdio ⇄ MCP server ⇄ ws://localhost:51730 ⇄ plugin ⇄ Figma
 ```
-
-`mirra_read` returns the same tree `mirra_render` accepts, so one format covers reading a
-design and building one, and an agent can write code from that tree without learning a
-second shape.
 
 ## Requirements
 
-- **Figma Desktop.** A development plugin can only be imported there, so the browser app
-  and Linux (which has no desktop build) are both out.
-- **Node 24 or newer**, and pnpm to build.
-- **macOS or Windows.** Only macOS has been run end to end so far.
+- **Figma Desktop** (a development plugin can't be imported in the browser app).
+- **Node 24+**, and pnpm to build.
+- **macOS or Windows.**
 
-## Tools
+## Install
+
+```sh
+npx @ttsalpha/mirra init
+```
+
+- Copies the plugin to `~/.mirra/plugin` and asks which clients to add Mirra to: Claude
+  Desktop, Cursor, VS Code, Antigravity, Claude Code. Detected ones are pre-selected.
+- `-y` accepts the detected clients without asking (also the behaviour with no terminal or
+  `CI` set); `--no-config` leaves client configs alone. Existing config files are backed up
+  first.
+- Registers the plugin with Figma Desktop, which only works while Figma is **closed**. If
+  it is running, do it by hand: Plugins → Development → Import plugin from manifest… →
+  `~/.mirra/plugin/manifest.json`.
+
+Then **restart your clients**. To upgrade, run the same command again, since the plugin only
+updates when `init` copies it (`mirra_ping` warns when it is out of date).
+
+Each release also ships a `.mcpb` bundle for Claude Desktop: one double-click, no terminal.
+
+## Use
+
+Once per session: open a file in Figma, run the Mirra plugin, leave its panel open.
+`mirra doctor` checks the port, the plugin and the connection if something is off.
 
 | Tool                  | What it does                                                                            |
 | --------------------- | --------------------------------------------------------------------------------------- |
@@ -36,70 +54,13 @@ second shape.
 | `mirra_define_tokens` | Create or update variables, modes, aliases and paint/text/effect styles                 |
 | `mirra_export_assets` | Write layers to disk as PNG or SVG                                                      |
 | `mirra_ping`          | Check the connection and report the open file                                           |
-| `mirra_exec`          | Run Plugin API code; see **Running arbitrary code** below                               |
+| `mirra_exec`          | Run Plugin API code; off by default, see below                                          |
 
-The tree mirrors flexbox: `layout: {dir, gap, pad, justify, align}`, and `w`/`h` take a
-number, `"fill"` or `"hug"`; a frame with a layout hugs its content by default. Node types
-are `frame`, `text`, `rect`, `ellipse`, `instance`, `svg` and `image`. Colours are hex
-strings or a gradient. Every node also takes `rotation` in degrees,
-`minW`/`maxW`/`minH`/`maxH`, `constraints: {h, v}` and `at: {x, y}` to pin it: inside an
-auto layout that lifts the node out of the flow, which is how a badge sits on a corner.
+The tree is flexbox-like (`layout: {dir, gap, pad, …}`, `w`/`h` as number, `"fill"` or
+`"hug"`), and `"$name"` binds a field to a variable. `mirra_read` and `mirra_render` share
+one format, so an agent can write code from what it reads.
 
-A `"$name"` follows a variable instead of repeating a value: a colour on `fill`, `stroke`
-or a text `color`, a number on `gap`, `pad`, `radius`, the stroke `width` and a text
-`size`, `lineHeight` or `letterSpacing`. Figma binds the field, so changing the variable
-moves every layer that uses it. `w`/`h` are the exception: they stay numbers.
-
-The DSL has no type of its own for a component, a component set, a group or a section, so
-`mirra_read` hands each back as a frame, and a vector, star, polygon, line or boolean
-operation as the `svg` that redraws it. Rendering that tree makes plain frames again, which
-`mirra_patch` can turn into components.
-
-`svg` and `image` take `src` as inline content or as a path on disk: the server reads the
-file and inlines it, then records the path so `mirra_read` names it again rather than
-handing back a data URI.
-
-## Install
-
-```sh
-npx @ttsalpha/mirra init
-```
-
-That copies the plugin to `~/.mirra/plugin`, the server to `~/.mirra/server` when it is
-running from an npx cache that npm may clear later, and registers the server with every
-client it finds: Claude Desktop, Cursor, VS Code and Antigravity by merging one entry into their config,
-Claude Code through its own CLI. Each file is backed up beside itself first, and
-`--no-config` skips all of it. The command is written with the real path of the Node binary
-that ran it, because a version manager puts `node` behind a path that changes with every
-shell and a GUI client never sees it.
-
-It also registers the plugin with Figma Desktop by writing into Figma's own settings,
-which only works while Figma is **closed** — that file is rewritten from memory on quit.
-If Figma is running, or the format turns out to be one Mirra does not recognise, `init` says
-so and falls back to the manual route: Figma Desktop → Plugins → Development → Import plugin
-from manifest… → `~/.mirra/plugin/manifest.json`.
-
-Either way, **restart the clients**, or they will not see the tools.
-
-Upgrading is the same command. Half the features live in the plugin, which only changes
-when `init` copies it over, so a new server against an old plugin quietly does less;
-`mirra_ping` says so when the two drift apart.
-
-Every release also attaches a `.mcpb` bundle for anyone who would rather not open a
-terminal: one double-click, Claude Desktop's own Node, and the variables below become a
-form.
-
-## Day to day
-
-Once per working session: open a file in Figma, run the Mirra plugin, leave its panel open.
-Figma has no background plugins, so closing the panel ends the connection.
-
-The plugin holds a connection to every server it finds, so several clients can work on the
-same file at once, and one that starts later is picked up within a few seconds. Operations
-run one at a time, so two clients cannot interleave or land in the same undo step.
-
-`mirra doctor` checks the port, the installed plugin and the live connection, so it says
-which half is broken.
+## Configuration
 
 | Variable             | What it does                                                                |
 | -------------------- | --------------------------------------------------------------------------- |
@@ -108,41 +69,27 @@ which half is broken.
 | `MIRRA_ALLOW_EXEC`   | Register `mirra_exec` at all; the panel still has to allow it               |
 | `MIRRA_ALLOW_ORIGIN` | Accept one more browser origin on the socket                                |
 
-Without `MIRRA_ROOT`, paths are read and written relative to the working directory, so a
-client that starts the server outside a project, Claude Desktop among them, should set it.
+Without `MIRRA_ROOT`, paths resolve from the working directory, so set it for clients that
+start the server outside a project (Claude Desktop, for one).
 
-## Running arbitrary code
+### Running arbitrary code
 
-`mirra_exec` runs whatever Plugin API code the agent writes against the open document. It
-takes two keys, which are deliberately held by different people: the server only registers
-the tool when `MIRRA_ALLOW_EXEC` is set, and the plugin only runs it while **Allow code
-execution** is ticked in its panel. The tick resets every time the plugin runs.
+`mirra_exec` runs any Plugin API code the agent writes. It needs two keys: the server
+registers it only with `MIRRA_ALLOW_EXEC` set, and the plugin runs it only while **Allow
+code execution** is ticked in its panel (reset on every run).
 
 ```sh
 claude mcp add -s user Mirra-exec -e MIRRA_ALLOW_EXEC=1 -- npx -y @ttsalpha/mirra serve
 ```
 
-The socket listens on loopback and refuses any browser origin other than Figma's, so a page
-you happen to have open cannot reach it. It is still unauthenticated against other
-processes on the same machine: anything already running as you can talk to it while the
-plugin is open.
+The socket listens on loopback and rejects browser origins other than Figma's, but it is
+unauthenticated against other processes running as you while the plugin is open.
 
-## How it fits together
+## Development
 
-`packages/schema` holds the zod tree and the wire protocol, `packages/plugin` the Figma
-side, `packages/server` the MCP server and CLI. The plugin bundle ships inside the server
-package, which is what `mirra init` installs.
-
-Tests run `render` and `read` against a hand-written fake of the Figma sandbox, so the
-round trip is checked without Figma open; the server tests spawn `mirra serve` over stdio
-with a stub plugin on the socket.
-
-Three things Figma imposes on this setup. Its manifest validator rejects an IP literal, so
-`networkAccess` lists `ws://localhost:<port>` rather than `127.0.0.1`, and the server
-listens on both loopback addresses because the plugin's renderer resolves `localhost` to
-`::1` first. That renderer also opens sockets slowly, so the plugin races every candidate
-port at once instead of trying them one at a time; the panel probes `/health` over HTTP
-when a round fails, which tells a missing server apart from a blocked one.
+`packages/schema` holds the tree and wire protocol, `packages/plugin` the Figma side,
+`packages/server` the MCP server and CLI. Tests run against a fake of the Figma sandbox, so
+they don't need Figma open.
 
 ## License
 
