@@ -78,8 +78,13 @@ async function createNode(spec: UINode, parent: Container): Promise<SceneNode> {
 
 async function make(spec: UINode): Promise<SceneNode> {
   switch (spec.type) {
-    case "frame":
-      return figma.createFrame();
+    case "frame": {
+      // Figma gives every new frame a white fill; an unspecified fill should mean
+      // transparent, the way a div without a background does.
+      const frame = figma.createFrame();
+      frame.fills = [];
+      return frame;
+    }
     case "text":
       return figma.createText();
     case "rect":
@@ -130,7 +135,7 @@ function remember(node: SceneNode, spec: { src: string; srcRef?: string; type: s
 }
 
 /** Components are looked up by name on the current page, variants as "Set/Variant". */
-async function findComponent(name: string): Promise<ComponentNode> {
+export async function findComponent(name: string): Promise<ComponentNode> {
   const components = figma.currentPage.findAllWithCriteria({ types: ["COMPONENT"] });
   const match = components.find((component) => componentPath(component) === name);
   if (!match) {
@@ -147,6 +152,103 @@ function componentPath(component: ComponentNode): string {
   return parent && parent.type === "COMPONENT_SET"
     ? `${parent.name}/${component.name}`
     : component.name;
+}
+
+const VECTOR_TYPES = new Set(["VECTOR", "STAR", "POLYGON", "LINE", "BOOLEAN_OPERATION"]);
+
+/**
+ * What `set` can change beyond the props `render` and `patch` share: the key, the
+ * component an instance follows, and the source of an image or svg. Figma cannot
+ * swap an svg's markup in place, so that node is replaced and the new one returned.
+ */
+export async function applyIdentity(
+  node: SceneNode,
+  props: NodeProps,
+  keys: Record<string, string>,
+): Promise<SceneNode> {
+  let current = node;
+
+  if (props.src !== undefined) current = await swapSource(current, props, keys);
+  else if (props.fit !== undefined) setFit(current, props.fit);
+
+  if (props.component !== undefined) {
+    if (current.type !== "INSTANCE") {
+      throw new Error(`component only applies to an instance, not a ${low(current)}`);
+    }
+    current.swapComponent(await findComponent(props.component));
+    current.setPluginData(COMPONENT_FIELD, props.component);
+  }
+
+  if (props.key !== undefined) {
+    const taken = figma.currentPage
+      .findAllWithCriteria({ pluginData: { keys: [KEY_FIELD] } })
+      .some((other) => other.id !== current.id && other.getPluginData(KEY_FIELD) === props.key);
+    if (taken) throw new Error(`Another node already has the key "${props.key}"`);
+    current.setPluginData(KEY_FIELD, props.key);
+    keys[props.key] = current.id;
+  }
+
+  return current;
+}
+
+async function swapSource(
+  node: SceneNode,
+  props: NodeProps,
+  keys: Record<string, string>,
+): Promise<SceneNode> {
+  const src = props.src as string;
+
+  if (node.type === "RECTANGLE") {
+    const image = figma.createImage(figma.base64Decode(stripDataUri(src)));
+    const fit = props.fit ?? currentFit(node) ?? "fill";
+    node.fills = [{ type: "IMAGE", imageHash: image.hash, scaleMode: SCALE_MODES[fit] }];
+    node.setPluginData(SRC_FIELD, "");
+    remember(node, { ...props, src, type: "image" });
+    return node;
+  }
+
+  const isSvg = node.getPluginData(SVG_FIELD) !== "" || VECTOR_TYPES.has(node.type);
+  if (!isSvg || !node.parent || !("insertChild" in node.parent)) {
+    throw new Error(`src only applies to an image or svg, not a ${low(node)}`);
+  }
+
+  const parent = node.parent as BaseNode & ChildrenMixin;
+  const replacement = figma.createNodeFromSvg(src);
+  parent.insertChild(parent.children.indexOf(node), replacement);
+  replacement.name = node.name;
+  replacement.opacity = (node as SceneNode & BlendMixin).opacity;
+  replacement.visible = node.visible;
+  if (!("layoutMode" in parent) || parent.layoutMode === "NONE") {
+    replacement.x = node.x;
+    replacement.y = node.y;
+  }
+  remember(replacement, { ...props, src, type: "svg" });
+
+  const key = node.getPluginData(KEY_FIELD);
+  if (key) {
+    replacement.setPluginData(KEY_FIELD, key);
+    keys[key] = replacement.id;
+  }
+  node.remove();
+  return replacement;
+}
+
+function setFit(node: SceneNode, fit: keyof typeof SCALE_MODES): void {
+  const paints = node.type === "RECTANGLE" && Array.isArray(node.fills) ? node.fills : [];
+  if (!paints.some((paint) => paint.type === "IMAGE")) {
+    throw new Error(`fit only applies to an image, not a ${low(node)}`);
+  }
+  (node as RectangleNode).fills = paints.map((paint) =>
+    paint.type === "IMAGE" ? { ...paint, scaleMode: SCALE_MODES[fit] } : paint,
+  );
+}
+
+function currentFit(node: RectangleNode): keyof typeof SCALE_MODES | undefined {
+  const paint = Array.isArray(node.fills) ? node.fills.find((p) => p.type === "IMAGE") : undefined;
+  const mode = paint && paint.type === "IMAGE" ? paint.scaleMode : undefined;
+  return (Object.keys(SCALE_MODES) as (keyof typeof SCALE_MODES)[]).find(
+    (fit) => SCALE_MODES[fit] === mode,
+  );
 }
 
 /** Shared by `render` and `patch`; `w`/`h` are left to `applySizing`. */
@@ -268,10 +370,6 @@ async function applyLayout(
 
 async function applyPaint(node: SceneNode, props: NodeProps, tokens: TokenIndex): Promise<void> {
   const shape = node as SceneNode & GeometryMixin & CornerMixin & BlendMixin;
-
-  // Figma gives every new frame a white fill; an unspecified fill should mean
-  // transparent, the way a div without a background does.
-  if (!props.fill && node.type === "FRAME") shape.fills = [];
 
   // On a text node `fill` would fight with `color`, which owns its paints.
   if (props.fill && node.type !== "TEXT") {

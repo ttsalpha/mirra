@@ -158,6 +158,10 @@ class FakeInstance extends FakeNode {
     "Disabled#1:2": { type: "BOOLEAN", value: false },
   };
 
+  swapComponent(component: FakeComponent): void {
+    this.name = component.name;
+  }
+
   setProperties(properties: Record<string, string | boolean>): void {
     for (const [name, value] of Object.entries(properties)) {
       if (!(name in this.componentProperties)) {

@@ -168,3 +168,126 @@ test("a screenshot of a large frame lowers its scale to fit", async () => {
   expect(roomy.scale).toBe(2);
   expect(roomy.width).toBe(8000);
 });
+
+test("set leaves a frame's fill alone when the props do not mention one", async () => {
+  const root = await renderCard();
+
+  await patch({ ops: [{ op: "set", target: { key: "card" }, props: { opacity: 0.5 } }] });
+
+  expect(await treeOf(root)).toMatchObject({ fill: "#ffffff", opacity: 0.5 });
+});
+
+test("set src swaps an image's picture and keeps its fit", async () => {
+  const parent = fake.page as unknown as BaseNode & ChildrenMixin;
+  const image = await buildNode(
+    { type: "image", key: "hero", src: "data:image/png;base64,iVBORw0=", fit: "crop" },
+    parent,
+    {},
+  );
+
+  await patch({
+    ops: [{ op: "set", target: { key: "hero" }, props: { src: "data:image/png;base64,AAAA" } }],
+  });
+
+  expect(await readNode(image, 1)).toMatchObject({
+    tree: { type: "image", src: "data:image/png;base64,AAAA" },
+  });
+  expect((image as unknown as RectangleNode).fills).toMatchObject([{ scaleMode: "CROP" }]);
+});
+
+test("set fit changes how an image fills its box", async () => {
+  const parent = fake.page as unknown as BaseNode & ChildrenMixin;
+  const image = await buildNode(
+    { type: "image", key: "hero", src: "data:image/png;base64,iVBORw0=" },
+    parent,
+    {},
+  );
+
+  await patch({ ops: [{ op: "set", target: { key: "hero" }, props: { fit: "tile" } }] });
+
+  expect((image as unknown as RectangleNode).fills).toMatchObject([{ scaleMode: "TILE" }]);
+});
+
+test("set src on an svg replaces the node but keeps its key, name and place", async () => {
+  const card = await renderCard();
+  const parent = card as unknown as BaseNode & ChildrenMixin;
+  await patch({
+    ops: [
+      {
+        op: "append",
+        target: { key: "card" },
+        tree: { type: "svg", key: "icon", name: "Logo", src: "<svg><rect/></svg>" },
+        index: 0,
+      },
+    ],
+  });
+  const before = parent.children[0] as SceneNode;
+
+  const result = await patch({
+    ops: [
+      { op: "set", target: { key: "icon" }, props: { src: "<svg><circle/></svg>" } },
+      { op: "set", target: { key: "icon" }, props: { opacity: 0.5 } },
+    ],
+  });
+
+  const after = parent.children[0] as SceneNode;
+  expect(after).not.toBe(before);
+  expect(before.removed).toBe(true);
+  expect(after.name).toBe("Logo");
+  expect(after.getPluginData("mirra:key")).toBe("icon");
+  expect((after as SceneNode & BlendMixin).opacity).toBe(0.5);
+  expect(result.keys["icon"]).toBe(after.id);
+});
+
+test("set src on a node that is neither image nor svg says so", async () => {
+  await renderCard();
+
+  await expect(
+    patch({ ops: [{ op: "set", target: { key: "card" }, props: { src: "<svg/>" } }] }),
+  ).rejects.toThrow(/src only applies to an image or svg/);
+});
+
+test("set component swaps the main component of an instance", async () => {
+  fake.addComponent("Button");
+  fake.addComponent("Link");
+  const parent = fake.page as unknown as BaseNode & ChildrenMixin;
+  const instance = await buildNode(
+    { type: "instance", key: "cta", component: "Button" },
+    parent,
+    {},
+  );
+
+  await patch({ ops: [{ op: "set", target: { key: "cta" }, props: { component: "Link" } }] });
+
+  expect(instance.name).toBe("Link");
+  expect((await readNode(instance, 1)).tree).toMatchObject({ component: "Link" });
+});
+
+test("set key renames the handle, and refuses one that is taken", async () => {
+  await renderCard();
+
+  const result = await patch({
+    ops: [{ op: "set", target: { key: "title" }, props: { key: "heading" } }],
+  });
+  expect(result.keys["heading"]).toBeDefined();
+  await expect(
+    patch({ ops: [{ op: "set", target: { key: "heading" }, props: { key: "card" } }] }),
+  ).rejects.toThrow(/already has the key "card"/);
+});
+
+test("a failing op names itself, and what came before is kept as one undo step", async () => {
+  const root = await renderCard();
+  const commits = fake.undoCommits;
+
+  await expect(
+    patch({
+      ops: [
+        { op: "set", target: { key: "card" }, props: { fill: "#fafafa" } },
+        { op: "set", target: { key: "missing" }, props: { opacity: 0.5 } },
+      ],
+    }),
+  ).rejects.toThrow(/op 2 of 2 \(set\) failed: No node with key "missing".*1 op\(s\) before it/);
+
+  expect((await treeOf(root)).fill).toBe("#fafafa");
+  expect(fake.undoCommits).toBe(commits + 1);
+});
