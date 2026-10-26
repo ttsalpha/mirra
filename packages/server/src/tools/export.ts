@@ -25,9 +25,10 @@ export function registerExport(server: McpServer, bridge: PluginBridge): void {
         const directory = resolveInRoot(params.outDir);
         await mkdir(directory, { recursive: true });
 
+        const names = fileNames(result.assets);
         const written: string[] = [];
-        for (const asset of result.assets) {
-          const file = resolve(directory, `${slug(asset.name)}.${asset.extension}`);
+        for (const [position, asset] of result.assets.entries()) {
+          const file = resolve(directory, names[position] as string);
           await writeFile(file, Buffer.from(asset.data, "base64"));
           written.push(file);
         }
@@ -38,6 +39,19 @@ export function registerExport(server: McpServer, bridge: PluginBridge): void {
       }
     },
   );
+}
+
+/** Two layers can share a name, and the second must not overwrite the first. */
+export function fileNames(assets: { name: string; extension: string }[]): string[] {
+  const used = new Set<string>();
+  return assets.map((asset) => {
+    const base = slug(asset.name);
+    let candidate = `${base}.${asset.extension}`;
+    for (let copy = 2; used.has(candidate); copy++)
+      candidate = `${base}-${copy}.${asset.extension}`;
+    used.add(candidate);
+    return candidate;
+  });
 }
 
 /** Layer names are free text, so they cannot become path segments as they are. */
