@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
-import { registerWithClients, stableNodePath, targets } from "./clients.js";
+import { detectClients, registerWithClients, stableNodePath, targets } from "./clients.js";
 
 const ENTRY = "/opt/mirra/dist/index.js";
 
@@ -170,4 +170,85 @@ test("the node path written out is a real file, not a shell shim", async () => {
 
   expect(node).not.toContain("_multishells");
   await expect(readFile(node)).resolves.toBeDefined();
+});
+
+test("detectClients detects only installed clients", async () => {
+  await write(ANTIGRAVITY, {});
+  await mkdir(join(home, ".cursor"), { recursive: true });
+
+  const clients = await detectClients();
+  const detected = clients.filter((c) => c.detected).map((c) => c.name);
+
+  expect(detected).toContain("Antigravity");
+  expect(detected).toContain("Cursor");
+  expect(detected).not.toContain("Claude Desktop");
+  expect(detected).not.toContain("VS Code");
+});
+
+test("registerWithClients only touches selected clients", async () => {
+  await write(DESKTOP, { mcpServers: {} });
+  await write(CURSOR, { mcpServers: {} });
+
+  const reports = await registerWithClients(ENTRY, ["Cursor"]);
+
+  expect(reports.map((r) => r.client)).toEqual(["Cursor"]);
+  const cursorConfig = (await read(CURSOR)) as unknown as { mcpServers: Record<string, unknown> };
+  expect(cursorConfig.mcpServers["Mirra"]).toBeDefined();
+
+  const desktopConfig = (await read(DESKTOP)) as unknown as { mcpServers: Record<string, unknown> };
+  expect(desktopConfig.mcpServers["Mirra"]).toBeUndefined();
+});
+
+test("a shared folder alone does not count as Antigravity being installed", async () => {
+  await mkdir(join(home, ".gemini"), { recursive: true });
+
+  const clients = await detectClients();
+  expect(clients.find((c) => c.name === "Antigravity")?.detected).toBe(false);
+
+  const reports = await registerWithClients(ENTRY, ["Antigravity"]);
+  expect(reports.find((r) => r.client === "Antigravity")?.status).toBe("skipped");
+});
+
+test("a selected client with only its app folder gets a config file created", async () => {
+  await mkdir(join(home, ".cursor"), { recursive: true });
+
+  const reports = await registerWithClients(ENTRY, ["Cursor"]);
+
+  expect(reports.find((r) => r.client === "Cursor")?.status).toBe("written");
+  const config = (await read(CURSOR)) as unknown as { mcpServers: Record<string, unknown> };
+  expect(config.mcpServers["Mirra"]).toBeDefined();
+});
+
+test("without an explicit selection a missing config file is left missing", async () => {
+  await mkdir(join(home, ".cursor"), { recursive: true });
+
+  const reports = await registerWithClients(ENTRY);
+
+  expect(reports.find((r) => r.client === "Cursor")?.status).toBe("skipped");
+  await expect(readFile(join(home, CURSOR))).rejects.toThrow();
+});
+
+test("detectClients lists detected clients first, keeping the target order within each group", async () => {
+  // Cursor and VS Code are detected; Claude Desktop, Antigravity, Claude Code are not
+  await write(CURSOR, {});
+  await write(VSCODE, {});
+
+  const clients = await detectClients();
+  expect(clients.map((c) => c.name)).toEqual([
+    "Cursor",
+    "VS Code",
+    "Claude Desktop",
+    "Antigravity",
+    "Claude Code",
+  ]);
+  expect(clients.map((c) => c.detected)).toEqual([true, true, false, false, false]);
+});
+
+test("a config folder that cannot be created is reported as failed, not thrown", async () => {
+  await write("Library/Application Support/Code", {});
+
+  const reports = await registerWithClients(ENTRY, ["VS Code", "Cursor"]);
+
+  expect(reports.find((r) => r.client === "VS Code")?.status).toBe("failed");
+  expect(reports.map((r) => r.client)).toEqual(["Cursor", "VS Code"]);
 });

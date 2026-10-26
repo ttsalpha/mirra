@@ -1,7 +1,9 @@
 #!/usr/bin/env node
+import { cancel, intro, isCancel, log, multiselect, note, outro, spinner } from "@clack/prompts";
+import { homedir } from "node:os";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { DEFAULT_PORT, PORT_RANGE_END } from "@mirra/schema";
-import { registerWithClients } from "./clients.js";
+import { detectClients, registerWithClients, type ClientReport } from "./clients.js";
 import { registerPluginWithFigma } from "./figma-settings.js";
 import { installPlugin, installServer, isInstalled, PLUGIN_HOME, reveal } from "./install.js";
 import { createMcpServer, describeError } from "./mcp.js";
@@ -14,6 +16,7 @@ const USAGE = `mirra <command>
   doctor   Bind the plugin port and wait for the Figma plugin to connect
 
 Flags:
+  -y, --yes     init: accept detected clients without interactive prompt
   --no-reveal   init: do not open the folder on a manual import
   --no-config   init: do not touch any client's configuration
 
@@ -72,44 +75,134 @@ async function serve(): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  const { manifest } = await installPlugin();
-  const lines = [`Plugin installed at ${PLUGIN_HOME}`, ""];
+  const noConfig = process.argv.includes("--no-config");
+  const autoYes = process.argv.includes("-y") || process.argv.includes("--yes");
+  const interactive =
+    Boolean(process.stdin.isTTY && process.stdout.isTTY) && !autoYes && !process.env["CI"];
+  const ui = createUi(interactive);
 
-  if (process.argv.includes("--no-config")) {
-    lines.push("Left every client configuration alone.", "");
-  } else {
-    const reports = await registerWithClients(await installServer());
-    lines.push("Clients:");
-    for (const report of reports) {
-      lines.push(`  ${report.status.padEnd(8)} ${report.client.padEnd(15)} ${report.detail}`);
+  ui.intro("Mirra Figma MCP setup");
+
+  let selectedClients: string[] | undefined;
+
+  if (!noConfig) {
+    const clients = await detectClients();
+    const detected = clients.filter((c) => c.detected).map((c) => c.name);
+
+    if (interactive) {
+      const answer = await multiselect({
+        message: "Which clients should Mirra be added to?",
+        options: clients.map((c) => ({
+          value: c.name,
+          label: c.name,
+          hint: c.detected ? "detected" : "not detected",
+        })),
+        initialValues: detected,
+        required: false,
+      });
+
+      if (isCancel(answer)) {
+        cancel("Installation cancelled.");
+        process.exit(130);
+      }
+
+      selectedClients = answer as string[];
+    } else {
+      selectedClients = detected;
     }
-    lines.push("", "A client that was already running has to be restarted to see the tools.", "");
   }
 
-  const figma = await registerPluginWithFigma(PLUGIN_HOME);
-  const manual = figma.status === "skipped";
-  if (manual) {
-    lines.push(
-      `Could not register the plugin with Figma Desktop: ${figma.reason}`,
-      "Then, in Figma Desktop:",
-      "  1. Plugins -> Development -> Import plugin from manifest...",
-      `     and choose ${manifest}`,
-      "  2. Open a file, run Mirra, and leave the panel open",
-      "  3. Ask the agent for mirra_ping; the panel badge should turn green",
-    );
+  const { manifest } = await ui.task(
+    "Installing the Figma plugin",
+    `Plugin installed at ${PLUGIN_HOME}`,
+    () => installPlugin(),
+  );
+  if (!interactive) console.log(`Plugin installed at ${PLUGIN_HOME}`);
+
+  if (noConfig) {
+    ui.info("Left every client configuration alone.");
+  } else if (selectedClients?.length === 0) {
+    ui.info("No clients selected; skipped client configuration.");
   } else {
-    lines.push(
-      figma.status === "registered"
-        ? "Registered the plugin with Figma Desktop."
-        : "Figma Desktop already knows the plugin.",
-      "Then, in Figma Desktop:",
-      "  1. Open a file, run Plugins -> Development -> Mirra, and leave the panel open",
-      "  2. Ask the agent for mirra_ping; the panel badge should turn green",
+    const reports = await ui.task(
+      "Registering Mirra with your clients",
+      "Clients configured",
+      async () => registerWithClients(await installServer(), selectedClients),
     );
+    for (const report of reports) ui.client(report);
+    ui.info("A client that was already running has to be restarted to see the tools.");
   }
+
+  const figma = await ui.task(
+    "Registering the plugin with Figma Desktop",
+    "Figma Desktop settings read",
+    () => registerPluginWithFigma(PLUGIN_HOME),
+  );
+  const manual = figma.status === "skipped";
+
+  if (figma.status === "registered") ui.success("Registered the plugin with Figma Desktop.");
+  else if (figma.status === "already") ui.success("Figma Desktop already knows the plugin.");
+  else ui.warn(`Could not register the plugin with Figma Desktop: ${figma.reason}`);
+
+  ui.note(
+    "Next, in Figma Desktop",
+    manual
+      ? [
+          "1. Plugins -> Development -> Import plugin from manifest...",
+          `   and choose ${manifest}`,
+          "2. Open a file, run Mirra, and leave the panel open",
+          "3. Ask the agent for mirra_ping; the panel badge should turn green",
+        ]
+      : [
+          "1. Open a file, run Plugins -> Development -> Mirra, and leave the panel open",
+          "2. Ask the agent for mirra_ping; the panel badge should turn green",
+        ],
+  );
 
   if (manual && !process.argv.includes("--no-reveal")) reveal(manifest);
-  console.log(lines.join("\n"));
+  ui.outro("Done.");
+}
+
+const tildify = (text: string) => text.replace(homedir(), "~");
+
+/** Styled with clack in a terminal; plain lines when piped or in CI. */
+function createUi(interactive: boolean) {
+  const plain = (message: string) => console.log(message);
+  return {
+    intro: (title: string) => (interactive ? intro(title) : undefined),
+    outro: (message: string) => (interactive ? outro(message) : undefined),
+    info: (message: string) => (interactive ? log.info(message) : plain(message)),
+    success: (message: string) => (interactive ? log.success(message) : plain(message)),
+    warn: (message: string) => (interactive ? log.warn(message) : plain(message)),
+    note: (title: string, lines: string[]) =>
+      interactive
+        ? note(lines.join("\n"), title)
+        : plain(`${title}:\n${lines.map((l) => `  ${l}`).join("\n")}`),
+    client(report: ClientReport) {
+      if (!interactive) {
+        plain(`${report.status.padEnd(8)} ${report.client.padEnd(15)} ${report.detail}`);
+      } else if (report.status === "written") {
+        log.success(`${report.client}: ${tildify(report.detail)}`);
+      } else if (report.status === "failed") {
+        log.error(`${report.client}: ${tildify(report.detail)}`);
+      } else {
+        log.message(`${report.client}: ${tildify(report.detail)}`);
+      }
+    },
+    async task<T>(label: string, done: string, work: () => Promise<T>): Promise<T> {
+      if (!interactive) return work();
+      const spin = spinner();
+      spin.start(label);
+      try {
+        const result = await work();
+        spin.stop(done);
+        return result;
+      } catch (error) {
+        spin.error(`${label} failed`);
+        throw error;
+      }
+    },
+  };
 }
 
 async function doctor(): Promise<void> {

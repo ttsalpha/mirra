@@ -1,5 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { access, copyFile, readFile, rename, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { realpath } from "node:fs/promises";
@@ -30,6 +30,8 @@ export async function stableNodePath(): Promise<string> {
 export type Target = {
   client: string;
   file: string;
+  /** Marks the app as installed before it has written a config; leave out when the folder is shared with another tool. */
+  appDir?: string;
   /** VS Code calls the map `servers` and wants a `type`; the others use `mcpServers`. */
   key: "mcpServers" | "servers";
   typed?: boolean;
@@ -47,12 +49,19 @@ export function targets(platform: NodeJS.Platform = process.platform): Target[] 
     {
       client: "Claude Desktop",
       file: join(support, "Claude/claude_desktop_config.json"),
+      appDir: join(support, "Claude"),
       key: "mcpServers",
     },
-    { client: "Cursor", file: join(home, ".cursor/mcp.json"), key: "mcpServers" },
+    {
+      client: "Cursor",
+      file: join(home, ".cursor/mcp.json"),
+      appDir: join(home, ".cursor"),
+      key: "mcpServers",
+    },
     {
       client: "VS Code",
       file: join(support, "Code/User/mcp.json"),
+      appDir: join(support, "Code"),
       key: "servers",
       typed: true,
     },
@@ -64,14 +73,66 @@ export function targets(platform: NodeJS.Platform = process.platform): Target[] 
   ];
 }
 
-export async function registerWithClients(entryPoint: string): Promise<ClientReport[]> {
+export type DetectedClient = {
+  name: string;
+  detected: boolean;
+};
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isTargetDetected(target: Target): Promise<boolean> {
+  return (
+    (await exists(target.file)) || (target.appDir !== undefined && (await exists(target.appDir)))
+  );
+}
+
+export function isClaudeCodeDetected(): boolean {
+  const probe = runClaude(["--version"]);
+  return !probe.error && probe.status === 0;
+}
+
+export async function detectClients(
+  platform: NodeJS.Platform = process.platform,
+): Promise<DetectedClient[]> {
+  const list: DetectedClient[] = [];
+  for (const target of targets(platform)) {
+    list.push({
+      name: target.client,
+      detected: await isTargetDetected(target),
+    });
+  }
+  list.push({
+    name: "Claude Code",
+    detected: isClaudeCodeDetected(),
+  });
+
+  const detected = list.filter((c) => c.detected);
+  const notDetected = list.filter((c) => !c.detected);
+  return [...detected, ...notDetected];
+}
+
+export async function registerWithClients(
+  entryPoint: string,
+  selectedClients?: string[],
+): Promise<ClientReport[]> {
   const node = await stableNodePath();
   const reports: ClientReport[] = [];
 
   for (const target of targets()) {
-    reports.push(await writeEntry(target, node, entryPoint));
+    const selected = selectedClients?.includes(target.client);
+    if (selectedClients && !selected) continue;
+    reports.push(await writeEntry(target, node, entryPoint, selected === true));
   }
-  reports.push(claudeCode(node, entryPoint));
+  if (!selectedClients || selectedClients.includes("Claude Code")) {
+    reports.push(claudeCode(node, entryPoint));
+  }
   return reports;
 }
 
@@ -79,15 +140,22 @@ export async function registerWithClients(entryPoint: string): Promise<ClientRep
  * These files hold other people's servers and their secrets, so the entry is
  * merged into what is already there and the previous file is kept beside it.
  */
-async function writeEntry(target: Target, node: string, entryPoint: string): Promise<ClientReport> {
-  try {
-    await access(target.file);
-  } catch {
-    return { client: target.client, status: "skipped", detail: "not installed" };
+async function writeEntry(
+  target: Target,
+  node: string,
+  entryPoint: string,
+  createIfMissing: boolean,
+): Promise<ClientReport> {
+  const fileExists = await exists(target.file);
+  if (!fileExists) {
+    const canCreate =
+      createIfMissing && target.appDir !== undefined && (await exists(target.appDir));
+    if (!canCreate) return { client: target.client, status: "skipped", detail: "not installed" };
   }
 
   try {
-    const raw = await readFile(target.file, "utf8");
+    if (!fileExists) await mkdir(dirname(target.file), { recursive: true });
+    const raw = fileExists ? await readFile(target.file, "utf8") : "{}";
     const config = raw.trim() ? (JSON.parse(raw) as Record<string, unknown>) : {};
     const servers = (config[target.key] ?? {}) as Record<string, unknown>;
 
@@ -99,7 +167,9 @@ async function writeEntry(target: Target, node: string, entryPoint: string): Pro
     };
     config[target.key] = servers;
 
-    await copyFile(target.file, `${target.file}.mirra-backup`);
+    if (fileExists) {
+      await copyFile(target.file, `${target.file}.mirra-backup`);
+    }
     const temporary = join(dirname(target.file), `.${SERVER_NAME}-${process.pid}.json`);
     await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`);
     await rename(temporary, target.file);
