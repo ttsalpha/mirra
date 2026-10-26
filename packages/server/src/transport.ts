@@ -51,6 +51,7 @@ const OPEN_PLUGIN_HINT =
   "Open the file in Figma Desktop, then Plugins -> Development -> Mirra, and keep the panel open.";
 
 type Pending = {
+  socket: WebSocket;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
@@ -158,7 +159,7 @@ export class PluginBridge {
         );
       }, timeoutMs);
 
-      this.#pending.set(id, { resolve, reject, timer });
+      this.#pending.set(id, { socket, resolve, reject, timer });
       socket.send(JSON.stringify(envelope));
     });
   }
@@ -170,12 +171,29 @@ export class PluginBridge {
 
     socket.on("message", (raw) => this.#onMessage(String(raw)));
     socket.on("close", () => {
+      this.#failPending(socket);
       if (this.#socket === socket) {
         this.#socket = null;
         this.#hello = null;
       }
     });
     socket.on("error", (error) => log("plugin socket error:", error.message));
+  }
+
+  /** A socket that is gone will never answer, so its callers should not wait out the timeout. */
+  #failPending(socket: WebSocket): void {
+    for (const [id, pending] of this.#pending) {
+      if (pending.socket !== socket) continue;
+      clearTimeout(pending.timer);
+      this.#pending.delete(id);
+      pending.reject(
+        new MirraError(
+          "The Figma plugin disconnected before it answered",
+          "plugin_disconnected",
+          `The operation may or may not have been applied; check the file. ${OPEN_PLUGIN_HINT}`,
+        ),
+      );
+    }
   }
 
   #onMessage(raw: string): void {

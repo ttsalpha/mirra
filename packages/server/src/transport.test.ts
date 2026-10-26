@@ -127,3 +127,29 @@ test("a reconnecting plugin replaces the stale connection", async () => {
 
   await expect(bridge.request("ping")).resolves.toEqual({ from: "second" });
 });
+
+test("a request in flight fails at once when the plugin disconnects", async () => {
+  bridge = new PluginBridge();
+  const port = await bridge.listen(0);
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((resolve) => socket.once("open", resolve));
+
+  const pending = bridge.request("render", { tree: {} }, 10_000);
+  const outcome = expect(pending).rejects.toMatchObject({ code: "plugin_disconnected" });
+  socket.close();
+
+  await outcome;
+});
+
+test("a request in flight fails when a newer plugin replaces its connection", async () => {
+  bridge = new PluginBridge();
+  const port = await bridge.listen(0);
+  const first = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise((resolve) => first.once("open", resolve));
+
+  const pending = bridge.request("render", { tree: {} }, 10_000);
+  const outcome = expect(pending).rejects.toMatchObject({ code: "plugin_disconnected" });
+  await fakePlugin(port, () => ({}));
+
+  await outcome;
+});
