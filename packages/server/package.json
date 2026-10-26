@@ -1,6 +1,6 @@
 {
   "name": "@ttsalpha/mirra",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Two-way MCP server for Figma: read a design and render one back through the Figma Plugin API",
   "keywords": [
     "figma",
