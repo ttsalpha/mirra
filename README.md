@@ -7,6 +7,8 @@
 Two-way MCP server for Figma: an agent reads a design and renders one back through the
 Figma Plugin API, so it needs no REST token and has no monthly call limit.
 
+https://github.com/user-attachments/assets/f736473e-24c4-486f-980d-e6c90bf4d63a
+
 ```
 Claude ⇄ stdio ⇄ MCP server ⇄ ws://localhost:51730 ⇄ plugin ⇄ Figma
 ```
