@@ -7,20 +7,13 @@
         color-scheme: light dark;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         font-size: 11px;
-        --mark-ink: #101418;
-        --mark-mint: #0fa87c;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --mark-ink: #fff;
-          --mark-mint: #49e3b0;
-        }
       }
       html,
       body {
         height: 100%;
       }
       body {
+        box-sizing: border-box;
         margin: 0;
         min-height: 0;
         padding: 12px;
@@ -36,8 +29,8 @@
         gap: 8px;
       }
       .mark {
-        width: 16px;
-        height: 16px;
+        width: 20px;
+        height: 20px;
         flex: none;
       }
       .dot {
@@ -59,10 +52,33 @@
       #state {
         font-weight: 600;
       }
-      #port {
+      #help {
         margin-left: auto;
+        display: flex;
+        color: var(--figma-color-text-tertiary, #999);
+      }
+      #help:hover {
+        color: var(--figma-color-text, #1e1e1e);
+      }
+      #hint {
+        margin: 0;
         color: var(--figma-color-text-secondary, #777);
-        font-variant-numeric: tabular-nums;
+        line-height: 1.5;
+      }
+      #hint[hidden] {
+        display: none;
+      }
+      #hint strong {
+        color: var(--figma-color-text, #1e1e1e);
+        font-weight: 600;
+      }
+      #hint code {
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: var(--figma-color-bg-secondary, #f5f5f5);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 10px;
+        white-space: nowrap;
       }
       button {
         border: 1px solid var(--figma-color-border, #e6e6e6);
@@ -73,8 +89,12 @@
         font: inherit;
         cursor: pointer;
       }
-      button:hover {
+      button:hover:not(:disabled) {
         background: var(--figma-color-bg-hover, #ebebeb);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
       }
       #log {
         flex: 1 1 auto;
@@ -108,15 +128,39 @@
   <body>
     <header>
       <svg class="mark" viewBox="0 0 256 256" aria-hidden="true">
-        <g fill="none" stroke-width="32" stroke-linejoin="round" stroke-linecap="butt">
-          <path d="M48 116V44l80 56 80-56v72" stroke="var(--mark-ink)" />
-          <path d="M48 142v72l80-56 80 56v-72" stroke="var(--mark-mint)" />
+        <rect width="256" height="256" rx="56" fill="#101418" />
+        <g
+          transform="translate(33 33) scale(0.74)"
+          fill="none"
+          stroke-width="32"
+          stroke-linejoin="round"
+          stroke-linecap="butt"
+        >
+          <path d="M48 116V44l80 56 80-56v72" stroke="#fff" />
+          <path d="M48 142v72l80-56 80 56v-72" stroke="#49e3b0" />
         </g>
       </svg>
       <span id="dot" class="dot offline"></span>
       <span id="state">Disconnected</span>
-      <span id="port">—</span>
+      <a
+        id="help"
+        href="https://github.com/ttsalpha/mirra#readme"
+        target="_blank"
+        rel="noopener"
+        title="Help"
+        aria-label="Help"
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="6.25" stroke="currentColor" stroke-width="1.25" />
+          <path d="M8 7.25v3.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" />
+          <circle cx="8" cy="5" r="0.85" fill="currentColor" />
+        </svg>
+      </a>
     </header>
+    <p id="hint">
+      <strong>Waiting for the Mirra server.</strong> Open your MCP client, which starts it. First
+      time? Run <code>npx @ttsalpha/mirra init</code>.
+    </p>
     <button id="reconnect" type="button">Reconnect</button>
     <label id="exec-row">
       <input id="allow-exec" type="checkbox" />

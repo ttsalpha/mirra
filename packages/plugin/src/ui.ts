@@ -10,7 +10,8 @@ const MAX_LOGS = 10;
 type Status = "offline" | "connecting" | "online";
 
 let context: Extract<MainToUi, { kind: "context" }> | null = null;
-let scanning = false;
+let inflight: Promise<void> | null = null;
+let connectingLabel = "Connecting…";
 const logs: string[] = [];
 
 /** Every server that answered, so two clients can drive one Figma file. */
@@ -21,8 +22,8 @@ const askedBy = new Map<string, WebSocket>();
 
 const dot = element("dot");
 const stateLabel = element("state");
-const portLabel = element("port");
 const logList = element("log");
+const hint = element("hint");
 
 const allowExec = element("allow-exec") as HTMLInputElement;
 allowExec.addEventListener("change", () => {
@@ -30,10 +31,22 @@ allowExec.addEventListener("change", () => {
   log(`code execution ${allowExec.checked ? "allowed" : "blocked"}`);
 });
 
-element("reconnect").addEventListener("click", () => {
+const reconnect = element("reconnect") as HTMLButtonElement;
+reconnect.addEventListener("click", async () => {
+  // Disabled until the scan settles, so a second click cannot tear down the first attempt.
+  reconnect.disabled = true;
+  connectingLabel = "Reconnecting…";
   for (const socket of sockets.values()) socket.close();
   sockets.clear();
-  void scan();
+  setStatus("connecting");
+  log("reconnecting");
+  try {
+    await inflight;
+    await scan();
+  } finally {
+    connectingLabel = "Connecting…";
+    reconnect.disabled = false;
+  }
 });
 
 window.onmessage = (event: MessageEvent) => {
@@ -70,16 +83,16 @@ toMain({ kind: "ready" });
  * what lets several clients work at the same time, and it means a client that
  * starts later is picked up on the next pass rather than ignored.
  */
-async function scan(): Promise<void> {
-  if (scanning) return;
-  scanning = true;
-  if (!sockets.size) setStatus("connecting");
+function scan(): Promise<void> {
+  inflight ??= runScan().finally(() => {
+    inflight = null;
+  });
+  return inflight;
+}
 
-  try {
-    await Promise.all(PORTS.filter((port) => !sockets.has(port)).map(open));
-  } finally {
-    scanning = false;
-  }
+async function runScan(): Promise<void> {
+  if (!sockets.size) setStatus("connecting");
+  await Promise.all(PORTS.filter((port) => !sockets.has(port)).map(open));
 
   if (sockets.size) return setStatus("online");
   await probe(PORTS[0] as number);
@@ -169,11 +182,12 @@ function setStatus(next: Status): void {
   const ports = [...sockets.keys()].sort((a, b) => a - b);
   stateLabel.textContent =
     next === "online"
-      ? `Connected${ports.length > 1 ? ` (${ports.length})` : ""}`
+      ? `Connected${ports.length > 1 ? ` · ${ports.length}` : ""}`
       : next === "connecting"
-        ? "Connecting…"
+        ? connectingLabel
         : "Disconnected";
-  portLabel.textContent = ports.length ? ports.map((port) => `:${port}`).join(" ") : "—";
+  stateLabel.title = ports.map((port) => `:${port}`).join(" ");
+  hint.hidden = next !== "offline";
 }
 
 function log(message: string): void {
