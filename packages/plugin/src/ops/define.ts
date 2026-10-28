@@ -12,6 +12,10 @@ const TYPES = {
 } as const;
 
 export async function define(params: DefineParams): Promise<DefineResult> {
+  if (figma.editorType === "figjam") {
+    throw new Error("FigJam has no variables or styles to define. Open a Figma Design file.");
+  }
+
   const styles = await defineStyles(params.styles);
   if (!params.collection) {
     return { modes: [], styles, created: [], updated: [], notes: [] };

@@ -12,7 +12,7 @@ export function registerPing(server: McpServer, bridge: PluginBridge): void {
       annotations: READS,
       title: "Ping the Figma plugin",
       description:
-        "Check that the Mirra plugin is connected, and report the open file, current page and selection size.",
+        "Check that the Mirra plugin is connected, and report the open file, which editor it is (Figma Design or FigJam), current page and selection size.",
     },
     async () => {
       try {
@@ -21,6 +21,8 @@ export function registerPing(server: McpServer, bridge: PluginBridge): void {
 
         return text([
           `file: ${result.fileName}${result.fileKey ? ` (${result.fileKey})` : ""}`,
+          // An older plugin only ran in Figma Design and does not say.
+          `editor: ${result.editorType === "figjam" ? "FigJam" : "Figma Design"}`,
           `page: ${result.currentPage}`,
           `selection: ${result.selectionCount} node(s)`,
           `port: ${bridge.status.port}`,

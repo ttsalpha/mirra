@@ -5,10 +5,13 @@ import type { PluginBridge } from "../transport.js";
 import { describeError, text } from "./text.js";
 
 const FIND = `Locate layers by name, kind or mirra key, so an existing design can be targeted
-without clicking in Figma first. Searches the current page unless scope is "document".`;
+without clicking in Figma first. Searches the current page unless scope is "document".
+Kinds include the FigJam ones: section, sticky, shape, connector, table, code, link, gif,
+and the read-only stamp, highlight, washi and widget.`;
 
 const PAGES = `List the pages of the file, add one, or switch to one by name or id. Every other
-tool works on the current page, so start here when the layer you want is elsewhere.`;
+tool works on the current page, so start here when the layer you want is elsewhere.
+A FigJam file has a single page.`;
 
 export function registerFind(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

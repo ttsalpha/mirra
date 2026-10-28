@@ -1,4 +1,16 @@
 import type { Layout, NodeProps, Radius, Sizing, UINode } from "@mirra/schema";
+import {
+  applyJam,
+  checkJamProps,
+  checkNotJamProps,
+  fixedSize,
+  isJamNode,
+  isJamSpec,
+  makeJam,
+  settled,
+  settleSection,
+  type JamContext,
+} from "./jam";
 import { TokenIndex, isRef } from "./tokens";
 import {
   toCounterAxisAlign,
@@ -42,11 +54,17 @@ export async function buildNode(
     keys[spec.key] = node.id;
   }
 
-  await applyProps(node, spec, tokens);
+  await applyProps(node, spec, tokens, { keys, deferred });
 
-  if (spec.type === "frame") {
+  if (spec.type === "frame" || spec.type === "section") {
+    const pinned = new Set<SceneNode>();
     for (const child of spec.children ?? []) {
-      await buildNode(child, node as FrameNode, keys, tokens, deferred);
+      const built = await buildNode(child, node as FrameNode, keys, tokens, deferred);
+      if (child.at) pinned.add(built);
+    }
+    // Queued after the children's pins, which it reads.
+    if (spec.type === "section") {
+      deferred.push(() => settleSection(node as SectionNode, spec.layout, pinned, fixedSize(spec)));
     }
   }
 
@@ -60,23 +78,35 @@ export async function buildNode(
   // layout frame hugs by default, or Figma keeps the 100x100 it starts every
   // frame with.
   const fallback = spec.type === "frame" && spec.layout ? "hug" : undefined;
-  applySizing(node, spec.w ?? fallback, "Horizontal");
-  applySizing(node, spec.h ?? fallback, "Vertical");
+  const size = spec as { w?: Sizing; h?: Sizing };
+  applySizing(node, size.w ?? fallback, "Horizontal");
+  applySizing(node, size.h ?? fallback, "Vertical");
   // After sizing, before the deferred pin: Figma moves x and y when it rotates.
   applyRotation(node, spec);
   return node;
 }
 
 async function createNode(spec: UINode, parent: Container): Promise<SceneNode> {
-  const node = await make(spec);
+  const node = await make(spec).catch((error: unknown) => {
+    // FigJam lacks some of Figma Design's node types.
+    if (figma.editorType !== "figjam" || isJamSpec(spec)) throw error;
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `${spec.type} cannot be created in FigJam (${cause}). Use sticky, shape, connector, ` +
+        `section, table, code or link.`,
+    );
+  });
   parent.appendChild(node);
-  if (spec.type === "svg" || spec.type === "image") remember(node, spec);
+  if (spec.type === "link") await settled(node);
+  if (spec.type === "svg" || spec.type === "image" || spec.type === "gif") remember(node, spec);
   // The layer can be renamed, so the component it came from is recorded.
   if (spec.type === "instance") node.setPluginData(COMPONENT_FIELD, spec.component);
   return node;
 }
 
 async function make(spec: UINode): Promise<SceneNode> {
+  if (isJamSpec(spec)) return makeJam(spec);
+
   switch (spec.type) {
     case "frame": {
       // Figma gives every new frame a white fill; an unspecified fill should mean
@@ -122,7 +152,7 @@ const SCALE_MODES = {
   tile: "TILE",
 } as const;
 
-function stripDataUri(src: string): string {
+export function stripDataUri(src: string): string {
   const comma = src.indexOf(",");
   return src.startsWith("data:") && comma !== -1 ? src.slice(comma + 1) : src;
 }
@@ -256,16 +286,22 @@ export async function applyProps(
   node: SceneNode,
   props: NodeProps,
   tokens = new TokenIndex(),
+  jam: JamContext = { keys: {}, deferred: [] },
 ): Promise<void> {
+  const flat = isJamNode(node);
+  if (flat) checkJamProps(node, props);
+  else checkNotJamProps(node, props);
+
   if (props.name !== undefined) node.name = props.name;
   if (props.opacity !== undefined) (node as SceneNode & BlendMixin).opacity = props.opacity;
   if (props.visible !== undefined) node.visible = props.visible;
 
   if (props.layout !== undefined || props.clip !== undefined) {
-    if (node.type !== "FRAME") {
+    // A section is laid out after its children are in, by buildNode and patch.
+    if (node.type !== "FRAME" && node.type !== "SECTION") {
       throw new Error(`layout and clip only apply to a frame, not a ${low(node)}`);
     }
-    await applyLayout(node, props.layout, props.clip, tokens);
+    if (node.type === "FRAME") await applyLayout(node, props.layout, props.clip, tokens);
   }
 
   await applyPaint(node, props, tokens);
@@ -275,6 +311,11 @@ export async function applyProps(
       throw new Error(`component properties only apply to an instance, not a ${low(node)}`);
     }
     node.setProperties(resolveProperties(node, props.properties));
+  }
+
+  if (flat) {
+    await applyJam(node, props, jam);
+    return;
   }
 
   const typography =

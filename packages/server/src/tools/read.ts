@@ -9,7 +9,11 @@ so a design can be edited or turned into code without learning a second format.
 Reads the current selection unless a nodeId is given, and at most 200 nodes unless limit
 says otherwise, so a large design cannot fill the context in one call.
 Components, component sets, groups and sections read back as frames, and vectors as the
-svg markup that redraws them, so a file someone else designed still comes back whole.`;
+svg markup that redraws them, so a file someone else designed still comes back whole.
+In FigJam a section reads back as a section, with every child's position in "at", and
+stickies, shapes, connectors, tables, code blocks and links read as their own types. A GIF
+reads back only when mirra placed it, as the file it came from. Stamps, highlights, washi
+tape and widgets are left out and counted; mirra_find can still locate them.`;
 
 export function registerRead(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

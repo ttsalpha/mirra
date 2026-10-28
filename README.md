@@ -4,8 +4,8 @@
 
 <h1 align="center">Mirra</h1>
 
-Two-way MCP server for Figma: an agent reads a design and renders one back through the
-Figma Plugin API, so it needs no REST token and has no monthly call limit.
+Two-way MCP server for Figma: an agent reads a design or a FigJam board and renders one
+back through the Figma Plugin API, so it needs no REST token and has no monthly call limit.
 
 https://github.com/user-attachments/assets/f736473e-24c4-486f-980d-e6c90bf4d63a
 
@@ -41,7 +41,7 @@ Each release also ships a `.mcpb` bundle for Claude Desktop: one double-click, n
 
 ## Use
 
-Once per session: open a file in Figma, run the Mirra plugin, leave its panel open.
+Once per session: open a file in Figma or FigJam, run the Mirra plugin, leave its panel open.
 `mirra doctor` checks the port, the plugin and the connection if something is off.
 
 | Tool                  | What it does                                                                            |
@@ -61,6 +61,11 @@ Once per session: open a file in Figma, run the Mirra plugin, leave its panel op
 The tree is flexbox-like (`layout: {dir, gap, pad, …}`, `w`/`h` as number, `"fill"` or
 `"hug"`), and `"$name"` binds a field to a variable. `mirra_read` and `mirra_render` share
 one format, so an agent can write code from what it reads.
+
+FigJam has no frames, auto layout or variables, so a board is a `section` holding `sticky`,
+`shape`, `connector`, `table`, `code`, `link` and `gif` nodes. A connector joins nodes by `key`
+and routes itself. `mirra_define_tokens` and `"$name"` need a Figma Design file. Stamps,
+highlights, washi tape and widgets can't be created or read, only found with `mirra_find`.
 
 ## Configuration
 

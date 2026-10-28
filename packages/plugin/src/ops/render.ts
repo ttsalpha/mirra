@@ -39,6 +39,6 @@ function centreOfViewport(node: SceneNode): { x: number; y: number } {
 }
 
 function countNodes(spec: UINode): number {
-  if (spec.type !== "frame") return 1;
+  if (spec.type !== "frame" && spec.type !== "section") return 1;
   return 1 + (spec.children ?? []).reduce((total, child) => total + countNodes(child), 0);
 }

@@ -6,6 +6,9 @@
 
 const MIXED = Symbol("figma.mixed");
 
+/** What `loadFontAsync` has been asked for, since FigJam refuses writes to unloaded fonts. */
+const loadedFonts = new Set<string>();
+
 let nextId = 1;
 
 class FakeNode {
@@ -197,6 +200,222 @@ class FakeText extends FakeNode {
   }
 }
 
+/** The text layer FigJam nodes carry, which has no alignment or line height. */
+class FakeSublayer {
+  characters = "";
+  #font = { family: "Inter", style: "Medium" };
+  // FigJam reports no family for the layer as a whole, though the glyphs have one.
+  get fontName(): unknown {
+    return { family: "", style: "" };
+  }
+  set fontName(font: { family: string; style: string }) {
+    this.#font = font;
+  }
+  getRangeFontName(): unknown {
+    return this.#font;
+  }
+  fontSize: unknown = 16;
+  letterSpacing: unknown = { unit: "PIXELS", value: 0 };
+  fills: unknown[] = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 }, opacity: 1 }];
+}
+
+class FakeSticky extends FakeNode {
+  readonly type = "STICKY";
+  name = "Sticky";
+  width = 240;
+  height = 240;
+  text = new FakeSublayer();
+  isWideWidth = false;
+  authorVisible = false;
+  fills: unknown[] = [{ type: "SOLID", color: { r: 1, g: 0.79, b: 0.26 }, opacity: 1 }];
+}
+
+class FakeShape extends FakeNode {
+  readonly type = "SHAPE_WITH_TEXT";
+  name = "Shape";
+  width = 208;
+  height = 208;
+  shapeType = "SQUARE";
+  text = new FakeSublayer();
+}
+
+class FakeConnector extends FakeNode {
+  readonly type = "CONNECTOR";
+  name = "Connector";
+  text = new FakeSublayer();
+  #line = "ELBOWED";
+  #start: unknown = { position: { x: 0, y: 0 } };
+  #end: unknown = { position: { x: 200, y: 0 } };
+
+  // FigJam only lets a straight line sit on the centre magnet.
+  #check(line: string, end: unknown, what: string): void {
+    const magnet = (end as { magnet?: string }).magnet;
+    if (line === "STRAIGHT" && magnet && magnet !== "CENTER" && magnet !== "NONE") {
+      throw new Error(
+        `in set_${what}: Straight connector endpoints may only use the CENTER or NONE magnets.`,
+      );
+    }
+  }
+
+  get connectorLineType(): string {
+    return this.#line;
+  }
+  set connectorLineType(line: string) {
+    this.#check(line, this.#start, "connectorStart");
+    this.#check(line, this.#end, "connectorEnd");
+    this.#line = line;
+  }
+  get connectorStart(): unknown {
+    return this.#start;
+  }
+  set connectorStart(end: unknown) {
+    this.#check(this.#line, end, "connectorStart");
+    this.#start = end;
+  }
+  get connectorEnd(): unknown {
+    return this.#end;
+  }
+  set connectorEnd(end: unknown) {
+    this.#check(this.#line, end, "connectorEnd");
+    this.#end = end;
+  }
+  connectorStartStrokeCap = "NONE";
+  connectorEndStrokeCap = "ARROW_EQUILATERAL";
+}
+
+class FakeMedia extends FakeNode {
+  readonly type = "MEDIA";
+  name = "GIF";
+  mediaData: { hash: string };
+
+  constructor(hash: string) {
+    super();
+    this.mediaData = { hash };
+  }
+}
+
+class FakeCodeBlock extends FakeNode {
+  readonly type = "CODE_BLOCK";
+  name = "Code";
+  #code = "";
+
+  get code(): string {
+    return this.#code;
+  }
+  set code(value: string) {
+    if (!loadedFonts.has("Source Code Pro Medium")) {
+      throw new Error(
+        'in set_code: Cannot write to node with unloaded font "Source Code Pro Medium".',
+      );
+    }
+    this.#code = value;
+  }
+  codeLanguage = "PLAINTEXT";
+}
+
+/** Shows up when a page is walked, but has no name or plugin data, like FigJam's. */
+class FakeCell {
+  readonly type = "TABLE_CELL";
+  text = new FakeSublayer();
+  fills: unknown[] = [];
+  width = 120;
+  height = 40;
+}
+
+class FakeTable extends FakeNode {
+  readonly type = "TABLE";
+  name = "Table";
+  cells: FakeCell[][];
+
+  constructor(rows: number, columns: number) {
+    super();
+    this.cells = Array.from({ length: rows }, () =>
+      Array.from({ length: columns }, () => new FakeCell()),
+    );
+    // As in FigJam: a fill set on the table lands on its cells, and reads back as something else.
+    Object.defineProperty(this, "fills", {
+      get: () => [{ type: "SOLID", color: { r: 0, g: 0, b: 0 }, opacity: 0.1 }],
+      set: (paints: unknown[]) => this.cells.flat().forEach((cell) => (cell.fills = paints)),
+    });
+  }
+
+  get children(): FakeCell[] {
+    return this.cells.flat();
+  }
+
+  get numRows(): number {
+    return this.cells.length;
+  }
+
+  get numColumns(): number {
+    return this.cells[0]?.length ?? 0;
+  }
+
+  cellAt(row: number, column: number): FakeCell {
+    const cell = this.cells[row]?.[column];
+    if (!cell) throw new Error(`No cell at ${row}, ${column}`);
+    return cell;
+  }
+
+  insertRow(at: number): void {
+    this.cells.splice(
+      at,
+      0,
+      Array.from({ length: this.numColumns }, () => new FakeCell()),
+    );
+  }
+
+  removeRow(at: number): void {
+    this.cells.splice(at, 1);
+  }
+
+  insertColumn(at: number): void {
+    for (const row of this.cells) row.splice(at, 0, new FakeCell());
+  }
+
+  removeColumn(at: number): void {
+    for (const row of this.cells) row.splice(at, 1);
+  }
+
+  resizeColumn(column: number, width: number): void {
+    for (const row of this.cells) {
+      const cell = row[column];
+      if (cell) cell.width = width;
+    }
+  }
+
+  resizeRow(row: number, height: number): void {
+    for (const cell of this.cells[row] ?? []) cell.height = height;
+  }
+}
+
+class FakeSection extends FakeNode {
+  readonly type = "SECTION";
+  name = "Section";
+  width = 640;
+  height = 640;
+  fills: unknown[] = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 1 }];
+  cornerRadius = 0;
+  children: FakeNode[] = [];
+
+  appendChild(child: FakeNode): void {
+    child.parent?.children.splice(child.parent.children.indexOf(child), 1);
+    this.children.push(child);
+    child.parent = this as unknown as FakeFrame;
+  }
+
+  insertChild(index: number, child: FakeNode): void {
+    child.parent?.children.splice(child.parent.children.indexOf(child), 1);
+    this.children.splice(index, 0, child);
+    child.parent = this as unknown as FakeFrame;
+  }
+
+  resizeWithoutConstraints(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
+  }
+}
+
 class FakePage {
   readonly type = "PAGE";
   readonly id = "0:1";
@@ -219,8 +438,8 @@ class FakePage {
   findAll(predicate: (node: FakeNode) => boolean): FakeNode[] {
     const found: FakeNode[] = [];
     const walk = (node: FakeNode | FakePage) => {
-      if (node instanceof FakeNode && predicate(node)) found.push(node);
-      if ("children" in node) node.children.forEach(walk);
+      if (node !== this && predicate(node as FakeNode)) found.push(node as FakeNode);
+      if ("children" in node) (node.children as FakeNode[]).forEach(walk);
     };
     walk(this);
     return found;
@@ -265,6 +484,8 @@ type FakeVariable = {
 type FakeTextStyle = { id: string; name: string; fontName: FontName; fontSize: number };
 
 export type FakeFigma = {
+  /** "figjam" turns off what FigJam lacks, the way the real editor does. */
+  editorType: "figma" | "figjam";
   page: FakePage;
   pages: FakePage[];
   current: FakePage;
@@ -290,8 +511,10 @@ export type FakeFigma = {
 /** Installs the fake on `globalThis` and hands back the page everything lands on. */
 export function installFakeFigma(): FakeFigma {
   nextId = 1;
+  loadedFonts.clear();
   const page = new FakePage();
   const state: FakeFigma = {
+    editorType: "figma",
     page,
     pages: [page],
     current: page,
@@ -350,6 +573,9 @@ export function installFakeFigma(): FakeFigma {
 
   (globalThis as Record<string, unknown>)["figma"] = {
     mixed: MIXED,
+    get editorType() {
+      return state.editorType;
+    },
     get currentPage() {
       return state.current;
     },
@@ -360,7 +586,24 @@ export function installFakeFigma(): FakeFigma {
       },
     },
     viewport: { center: { x: 0, y: 0 }, scrollAndZoomIntoView: () => {} },
-    createFrame: () => track(new FakeFrame()),
+    createFrame: () => {
+      if (state.editorType === "figjam")
+        throw new Error("figma.createFrame is not available in FigJam");
+      return track(new FakeFrame());
+    },
+    createSticky: () => track(new FakeSticky()),
+    createShapeWithText: () => track(new FakeShape()),
+    createConnector: () => track(new FakeConnector()),
+    createCodeBlock: () => track(new FakeCodeBlock()),
+    createGif: (hash: string) => track(new FakeMedia(hash)),
+    createSection: () => track(new FakeSection()),
+    createTable: (rows = 2, columns = 2) => track(new FakeTable(rows, columns)),
+    createLinkPreviewAsync: async (url: string) => {
+      const embed = new FakeNode() as FakeNode & Record<string, unknown>;
+      Object.defineProperty(embed, "type", { value: "LINK_UNFURL" });
+      embed["linkUnfurlData"] = { url, title: null, description: null, provider: null };
+      return track(embed);
+    },
     createPage: () => {
       const page = new FakePage();
       page.name = "Page";
@@ -390,7 +633,10 @@ export function installFakeFigma(): FakeFigma {
     createRectangle: () => track(new FakeRectangle()),
     createEllipse: () => track(new FakeEllipse()),
     createText: () => track(new FakeText()),
-    loadFontAsync: async () => {},
+    loadFontAsync: async (font: { family: string; style: string }) => {
+      if (!font.family) throw new Error(`Cannot load font family "": family is not available`);
+      loadedFonts.add(`${font.family} ${font.style}`);
+    },
     getNodeByIdAsync: async (id: string) => nodesById().get(id) ?? null,
     loadAllPagesAsync: async () => {},
     commitUndo: () => {

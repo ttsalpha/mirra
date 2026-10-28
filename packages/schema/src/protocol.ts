@@ -18,6 +18,9 @@ export const OpName = z.enum([
 ]);
 export type OpName = z.infer<typeof OpName>;
 
+export const EditorType = z.enum(["figma", "figjam"]);
+export type EditorType = z.infer<typeof EditorType>;
+
 /** server -> plugin */
 export const RequestEnvelope = z.object({
   id: z.string(),
@@ -46,6 +49,8 @@ export const HelloMessage = z.object({
   pluginVersion: z.string(),
   fileKey: z.string().nullable(),
   fileName: z.string(),
+  /** Absent from plugins that predate FigJam support. */
+  editorType: EditorType.optional(),
 });
 export type HelloMessage = z.infer<typeof HelloMessage>;
 
@@ -152,6 +157,18 @@ export const NodeKind = z.enum([
   "component",
   "group",
   "vector",
+  "section",
+  "sticky",
+  "shape",
+  "connector",
+  "table",
+  "code",
+  "link",
+  "gif",
+  "stamp",
+  "highlight",
+  "washi",
+  "widget",
   "any",
 ]);
 
@@ -320,5 +337,6 @@ export const PingResult = z.object({
   currentPage: z.string(),
   selectionCount: z.number(),
   pluginVersion: z.string(),
+  editorType: EditorType.optional(),
 });
 export type PingResult = z.infer<typeof PingResult>;

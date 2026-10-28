@@ -9,5 +9,6 @@ export function ping(): PingResult {
     currentPage: figma.currentPage.name,
     selectionCount: figma.currentPage.selection.length,
     pluginVersion: PLUGIN_VERSION,
+    editorType: figma.editorType === "figjam" ? "figjam" : "figma",
   };
 }

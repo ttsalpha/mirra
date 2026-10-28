@@ -12,6 +12,19 @@ const KINDS: Record<string, string[]> = {
   component: ["COMPONENT", "COMPONENT_SET"],
   group: ["GROUP"],
   vector: ["VECTOR"],
+  section: ["SECTION"],
+  sticky: ["STICKY"],
+  shape: ["SHAPE_WITH_TEXT"],
+  connector: ["CONNECTOR"],
+  table: ["TABLE"],
+  code: ["CODE_BLOCK"],
+  link: ["EMBED", "LINK_UNFURL"],
+  gif: ["MEDIA"],
+  // Nodes mirra can locate and read the position of, but not create.
+  stamp: ["STAMP"],
+  highlight: ["HIGHLIGHT"],
+  washi: ["WASHI_TAPE"],
+  widget: ["WIDGET"],
 };
 
 export async function find(params: FindParams): Promise<FindResult> {
@@ -28,6 +41,8 @@ export async function find(params: FindParams): Promise<FindResult> {
 
   for (const page of pages) {
     for (const node of page.findAll(() => true)) {
+      // FigJam table cells turn up in the walk but are not layers: no name, no plugin data.
+      if ((node.type as string) === "TABLE_CELL") continue;
       if (kinds && !kinds.includes(node.type)) continue;
       if (needle && !node.name.toLowerCase().includes(needle)) continue;
 

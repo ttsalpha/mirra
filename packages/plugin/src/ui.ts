@@ -148,6 +148,7 @@ function attach(socket: WebSocket, port: number): void {
       pluginVersion: context?.pluginVersion ?? "unknown",
       fileKey: context?.fileKey ?? null,
       fileName: context?.fileName ?? "unknown",
+      editorType: context?.editorType ?? "figma",
     }),
   );
 }

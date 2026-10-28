@@ -40,6 +40,7 @@ function context(): MainToUi {
     protocolVersion: PROTOCOL_VERSION,
     fileName: figma.root.name,
     fileKey: readFileKey(),
+    editorType: figma.editorType === "figjam" ? "figjam" : "figma",
   };
 }
 

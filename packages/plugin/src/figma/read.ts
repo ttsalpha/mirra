@@ -1,5 +1,7 @@
-import type { Layout, Sizing, TextNode as TextSpec, UINode } from "@mirra/schema";
+import { CONNECTOR_CAPS, CONNECTOR_LINES, MAGNETS, SHAPE_TYPES } from "@mirra/schema/constants";
+import type { ConnectorEnd, Layout, Sizing, TextNode as TextSpec, UINode } from "@mirra/schema";
 import { COMPONENT_FIELD, KEY_FIELD, SRC_FIELD, SVG_FIELD } from "./build";
+import { readFont } from "./jam";
 import { EMPTY_NAMES, type NameIndex } from "./tokens";
 import {
   fromCounterAxisAlign,
@@ -38,6 +40,8 @@ async function toSpec(
   }
   budget.left -= 1;
 
+  if (node.type === "MEDIA") return mediaSpec(node, budget);
+
   const svg = node.getPluginData(SVG_FIELD);
   if (svg) return { type: "svg", ...common(node), src: svg };
 
@@ -45,6 +49,18 @@ async function toSpec(
   if (src) return { type: "image", ...common(node), ...painted(node, names), src };
 
   switch (node.type) {
+    case "STICKY":
+    case "SHAPE_WITH_TEXT":
+    case "CONNECTOR":
+    case "TABLE":
+    case "CODE_BLOCK":
+    case "EMBED":
+    case "LINK_UNFURL":
+      return jamSpec(node, names);
+    case "SECTION":
+      // FigJam's own container reads back as itself; in Figma Design it stays a frame.
+      if (figma.editorType === "figjam") return sectionSpec(node, depth, budget, names);
+      return frameSpec(node, depth, budget, names);
     case "TEXT":
       return textSpec(node, names);
     case "RECTANGLE":
@@ -58,7 +74,6 @@ async function toSpec(
     case "COMPONENT":
     case "COMPONENT_SET":
     case "GROUP":
-    case "SECTION":
       return frameSpec(node, depth, budget, names);
     // Shapes with no type either, but which export as the markup that redraws them.
     case "VECTOR":
@@ -105,6 +120,231 @@ async function frameSpec(
     ...(layout ? { layout } : {}),
     ...(children.length ? { children } : {}),
   };
+}
+
+/** Children keep their place, since FigJam has no layout to derive it from. */
+async function sectionSpec(
+  node: SectionNode,
+  depth: number,
+  budget: Budget,
+  names: NameIndex,
+): Promise<UINode> {
+  const children: UINode[] = [];
+  if (depth > 0) {
+    for (const child of node.children) {
+      const spec = await toSpec(child, depth - 1, budget, names);
+      if (spec) children.push(spec.type === "connector" ? spec : withAt(child, spec));
+    }
+  } else if (node.children.length) {
+    budget.count += node.children.length;
+  }
+
+  const fill = fromPaints(node.fills, names);
+  const stroke = strokeSpec(node as SectionNode & GeometryMixin, names);
+  const radius = node.cornerRadius;
+
+  return {
+    type: "section",
+    ...jamCommon(node),
+    w: round(node.width),
+    h: round(node.height),
+    ...(fill ? { fill } : {}),
+    ...(stroke ? { stroke } : {}),
+    ...(typeof radius === "number" && radius !== 0 ? { radius } : {}),
+    ...(children.length ? { children } : {}),
+  };
+}
+
+function withAt(node: SceneNode, spec: UINode): UINode {
+  return { ...spec, at: { x: round(node.x), y: round(node.y) } } as UINode;
+}
+
+const REVERSE = <T extends Record<string, string>>(map: T) =>
+  Object.fromEntries(Object.entries(map).map(([name, value]) => [value, name])) as Record<
+    string,
+    keyof T & string
+  >;
+const SHAPE_NAMES = REVERSE(SHAPE_TYPES);
+const LINE_NAMES = REVERSE(CONNECTOR_LINES);
+const CAP_NAMES = REVERSE(CONNECTOR_CAPS);
+const MAGNET_NAMES = REVERSE(MAGNETS);
+
+/** Key, name and visibility. */
+function jamCommon(node: SceneNode) {
+  const key = node.getPluginData(KEY_FIELD);
+  const blend = node as SceneNode & { opacity?: number };
+  return {
+    ...(key ? { key } : {}),
+    name: node.name,
+    ...(blend.opacity === undefined || blend.opacity === 1 ? {} : { opacity: blend.opacity }),
+    ...(node.visible ? {} : { visible: false }),
+  };
+}
+
+/** FigJam's default text colours: a sticky's, and a table cell's. Not repeated on every node. */
+const DEFAULT_TEXT_COLORS = new Set(["#000000", "#000000cc", "#1e1e1e"]);
+
+function sublayerText(layer: TextSublayerNode, names: NameIndex) {
+  const font = readFont(layer);
+  const size = layer.fontSize === figma.mixed ? undefined : layer.fontSize;
+  const color = fromPaints(layer.fills, names);
+  const spacing = layer.letterSpacing === figma.mixed ? undefined : layer.letterSpacing;
+
+  return {
+    text: layer.characters,
+    ...(font ? { font: { family: font.family, style: font.style } } : {}),
+    ...(size === undefined ? {} : { size }),
+    ...(spacing && spacing.unit === "PIXELS" && spacing.value !== 0
+      ? { letterSpacing: spacing.value }
+      : {}),
+    ...(color && !DEFAULT_TEXT_COLORS.has(color as string) ? { color } : {}),
+  };
+}
+
+/** A GIF's bytes cannot be read back, so one is only known by the file it came from. */
+function mediaSpec(node: MediaNode, budget: Budget): UINode | null {
+  const src = node.getPluginData(SRC_FIELD);
+  if (!src) {
+    budget.count += 1;
+    return null;
+  }
+  return withAt(node, {
+    type: "gif",
+    ...jamCommon(node),
+    src,
+    w: round(node.width),
+    h: round(node.height),
+  });
+}
+
+function key(value: unknown): string {
+  return JSON.stringify(value) ?? "";
+}
+
+function commonest<T>(values: (T | undefined)[]): T | undefined {
+  const counts = new Map<string, { value: T; count: number }>();
+  for (const value of values) {
+    if (value === undefined) continue;
+    const entry = counts.get(key(value)) ?? { value, count: 0 };
+    entry.count += 1;
+    counts.set(key(value), entry);
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count)[0]?.value;
+}
+
+async function jamSpec(node: SceneNode, names: NameIndex): Promise<UINode | null> {
+  switch (node.type) {
+    case "STICKY": {
+      const fill = fromPaints(node.fills, names);
+      return withAt(node, {
+        type: "sticky",
+        ...jamCommon(node),
+        ...sublayerText(node.text, names),
+        ...(fill ? { fill } : {}),
+        ...(node.isWideWidth ? { wide: true } : {}),
+        ...(node.authorVisible ? { author: true } : {}),
+      });
+    }
+    case "SHAPE_WITH_TEXT": {
+      const fill = fromPaints(node.fills, names);
+      const stroke = strokeSpec(node as ShapeWithTextNode & GeometryMixin, names);
+      const angle = round(node.rotation);
+      return withAt(node, {
+        type: "shape",
+        ...jamCommon(node),
+        shape: SHAPE_NAMES[node.shapeType] ?? "square",
+        w: round(node.width),
+        h: round(node.height),
+        ...(angle === 0 ? {} : { rotation: angle }),
+        ...sublayerText(node.text, names),
+        ...(fill ? { fill } : {}),
+        ...(stroke ? { stroke } : {}),
+      });
+    }
+    case "CONNECTOR": {
+      const stroke = strokeSpec(node as ConnectorNode & GeometryMixin, names);
+      const label = node.text.characters;
+      // What a bare key would have meant, so it is not spelled out again.
+      const assumed = node.connectorLineType === "STRAIGHT" ? "center" : "auto";
+      return {
+        type: "connector",
+        ...jamCommon(node),
+        from: await endSpec(node.connectorStart, assumed),
+        to: await endSpec(node.connectorEnd, assumed),
+        line: LINE_NAMES[node.connectorLineType] ?? "elbow",
+        startCap: CAP_NAMES[node.connectorStartStrokeCap] ?? "none",
+        endCap: CAP_NAMES[node.connectorEndStrokeCap] ?? "none",
+        ...(label ? { text: label } : {}),
+        ...(stroke ? { stroke } : {}),
+      };
+    }
+    case "TABLE": {
+      const grid = Array.from({ length: node.numRows }, (_, row) =>
+        Array.from({ length: node.numColumns }, (_, column) => {
+          const cell = node.cellAt(row, column);
+          return {
+            text: cell.text.characters,
+            fill: fromPaints(cell.fills, names),
+            color: fromPaints(cell.text.fills, names),
+          };
+        }),
+      );
+      // The table's own fills do not read back in FigJam, so the commonest cell fill stands in.
+      const fill = commonest(grid.flat().map((cell) => cell.fill));
+      const rows = grid.map((line) =>
+        line.map((cell) => {
+          const ownFill = cell.fill !== undefined && key(cell.fill) !== key(fill);
+          const ownColor =
+            cell.color !== undefined && !DEFAULT_TEXT_COLORS.has(cell.color as string);
+          if (!ownFill && !ownColor) return cell.text;
+          return {
+            text: cell.text,
+            ...(ownFill ? { fill: cell.fill } : {}),
+            ...(ownColor ? { color: cell.color } : {}),
+          };
+        }),
+      );
+      return withAt(node, {
+        type: "table",
+        ...jamCommon(node),
+        rows,
+        colWidths: Array.from({ length: node.numColumns }, (_, column) =>
+          round(node.cellAt(0, column).width),
+        ),
+        rowHeights: Array.from({ length: node.numRows }, (_, row) =>
+          round(node.cellAt(row, 0).height),
+        ),
+        ...(fill ? { fill } : {}),
+      });
+    }
+    case "CODE_BLOCK":
+      return withAt(node, {
+        type: "code",
+        ...jamCommon(node),
+        code: node.code,
+        language: node.codeLanguage.toLowerCase() as never,
+      });
+    case "EMBED": {
+      const { canonicalUrl, srcUrl } = node.embedData;
+      return withAt(node, { type: "link", ...jamCommon(node), url: canonicalUrl ?? srcUrl });
+    }
+    case "LINK_UNFURL":
+      return withAt(node, { type: "link", ...jamCommon(node), url: node.linkUnfurlData.url });
+    default:
+      return null;
+  }
+}
+
+/** A node with a key reads back as that key. */
+async function endSpec(end: ConnectorEndpoint, assumed: "auto" | "center"): Promise<ConnectorEnd> {
+  if (!("endpointNodeId" in end)) return { x: round(end.position.x), y: round(end.position.y) };
+
+  const target = await figma.getNodeByIdAsync(end.endpointNodeId);
+  const key = target && "getPluginData" in target ? target.getPluginData(KEY_FIELD) : "";
+  const magnet = "magnet" in end ? (MAGNET_NAMES[end.magnet] ?? assumed) : assumed;
+
+  if (key) return magnet === assumed ? key : { key, magnet };
+  return { id: end.endpointNodeId, magnet };
 }
 
 async function vectorSpec(node: SceneNode): Promise<UINode | null> {
@@ -329,7 +569,8 @@ function strokeSpec(node: SceneNode & GeometryMixin, names: NameIndex) {
   return {
     color,
     ...(weight === 1 ? {} : { width: weight }),
-    ...(node.strokeAlign === "INSIDE"
+    // A FigJam shape or connector has no stroke alignment to report.
+    ...(!node.strokeAlign || node.strokeAlign === "INSIDE"
       ? {}
       : { align: node.strokeAlign.toLowerCase() as "outside" | "center" }),
   };

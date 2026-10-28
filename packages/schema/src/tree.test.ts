@@ -55,3 +55,41 @@ test("render params default to the current page", () => {
   expect(params.parentId).toBeUndefined();
   expect(params.tree).toMatchObject({ type: "frame" });
 });
+
+test("accepts a FigJam board", () => {
+  const parsed = UINode.parse({
+    type: "section",
+    name: "Flow",
+    layout: { dir: "horizontal", gap: 16, wrap: true },
+    w: 800,
+    children: [
+      { type: "sticky", text: "Idea", fill: "#ffc943", wide: true },
+      { type: "shape", shape: "diamond", text: "Ok?", w: 160, h: 120 },
+      {
+        type: "connector",
+        from: "a",
+        to: { key: "b", magnet: "left" },
+        line: "elbow",
+        endCap: "arrow",
+      },
+      { type: "connector", from: { id: "1:2" }, to: { x: 10, y: 20 } },
+      {
+        type: "table",
+        rows: [
+          ["a", "b"],
+          ["c", "d"],
+        ],
+      },
+      { type: "code", code: "let a = 1", language: "typescript" },
+      { type: "link", url: "https://example.com" },
+    ],
+  });
+  expect(parsed.type).toBe("section");
+});
+
+test("rejects a FigJam node that is not well formed", () => {
+  expect(() => UINode.parse({ type: "shape", shape: "blob" })).toThrow();
+  expect(() => UINode.parse({ type: "connector", from: "a" })).toThrow();
+  expect(() => UINode.parse({ type: "table", rows: [] })).toThrow();
+  expect(() => UINode.parse({ type: "link", url: "not a url" })).toThrow();
+});

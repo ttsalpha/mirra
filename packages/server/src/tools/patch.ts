@@ -8,7 +8,10 @@ import { describeError, text } from "./text.js";
 const DESCRIPTION = `Change layers that already exist, addressed by the "key" they were rendered with
 (or by Figma node id). Ops are "set" to change properties, "append" to add a child tree,
 "replace" to swap a node for a new tree, "move", "component" to turn a node into one, and
-"remove". The whole patch is one undo step.`;
+"remove". The whole patch is one undo step.
+In FigJam, "set" also takes text, fill, shape, wide, from, to, line, startCap, endCap, rows,
+code and language, and a layout on a section reflows its children. A prop a node cannot
+take is refused by name rather than ignored.`;
 
 export function registerPatch(server: McpServer, bridge: PluginBridge): void {
   server.registerTool(

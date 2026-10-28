@@ -13,12 +13,21 @@ export function isRef(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("$");
 }
 
+export function inFigJam(): boolean {
+  return figma.editorType === "figjam";
+}
+
+function requireDesign(what: string): void {
+  if (inFigJam()) throw new Error(`FigJam has no variables or styles, so ${what} cannot be used`);
+}
+
 /** Resolves "$name" references to the variables and styles of the open file. */
 export class TokenIndex {
   #variables: Map<string, Variable> | null = null;
   #textStyles: Map<string, TextStyle> | null = null;
 
   async variable(ref: string): Promise<Variable> {
+    requireDesign(`the variable "${ref}"`);
     if (!this.#variables) {
       const all = await figma.variables.getLocalVariablesAsync();
       this.#variables = new Map(all.map((variable) => [variable.name, variable]));
@@ -29,6 +38,7 @@ export class TokenIndex {
   }
 
   async textStyle(ref: string): Promise<TextStyle> {
+    requireDesign(`the text style "${ref}"`);
     if (!this.#textStyles) {
       const all = await figma.getLocalTextStylesAsync();
       this.#textStyles = new Map(all.map((style) => [style.name, style]));
@@ -48,6 +58,8 @@ export type NameIndex = {
 export const EMPTY_NAMES: NameIndex = { variable: () => undefined, style: () => undefined };
 
 export async function buildNameIndex(): Promise<NameIndex> {
+  if (inFigJam()) return EMPTY_NAMES;
+
   const variables = new Map<string, string>();
   const styles = new Map<string, string>();
 
@@ -62,6 +74,10 @@ export async function buildNameIndex(): Promise<NameIndex> {
 }
 
 export async function readTokens(): Promise<TokensResult> {
+  if (inFigJam()) {
+    return { collections: [], styles: { paint: [], text: [], effect: [] } };
+  }
+
   const variables = await figma.variables.getLocalVariablesAsync();
   const byId = new Map(variables.map((variable) => [variable.id, variable]));
   const collections = await figma.variables.getLocalVariableCollectionsAsync();

@@ -1,4 +1,17 @@
 import { z } from "zod";
+import {
+  CODE_LANGUAGES,
+  CONNECTOR_CAPS,
+  CONNECTOR_LINES,
+  MAGNETS,
+  SHAPE_TYPES,
+} from "./constants.js";
+
+/** A zod enum over the keys of a name map, so the two cannot drift apart. */
+function keysOf<T extends Record<string, string>>(map: T) {
+  const keys = Object.keys(map) as [keyof T & string, ...(keyof T & string)[]];
+  return z.enum(keys);
+}
 
 /** `#rgb`, `#rrggbb` or `#rrggbbaa`. */
 export const Hex = z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
@@ -162,6 +175,123 @@ const instance = {
 export const InstanceNode = z.object({ ...base, ...instance, type: z.literal("instance") });
 export const EllipseNode = z.object({ ...base, ...painted, type: z.literal("ellipse") });
 
+/** FigJam has no auto layout, so a node sits where `at` says. */
+const jamBase = {
+  key: base.key,
+  name: base.name,
+  opacity: base.opacity,
+  visible: base.visible,
+  /** Inside a section, relative to it; at the top level, on the canvas. */
+  at: base.at,
+};
+
+/** The text on a sticky, a shape or a connector: font, size, letter spacing, colour. */
+const jamText = {
+  text: z.string().optional(),
+  font: typography.font,
+  size: typography.size,
+  letterSpacing: typography.letterSpacing,
+  color: typography.color,
+};
+
+export const ShapeKind = keysOf(SHAPE_TYPES);
+export const ConnectorLine = keysOf(CONNECTOR_LINES);
+export const ConnectorCap = keysOf(CONNECTOR_CAPS);
+export const Magnet = keysOf(MAGNETS);
+export const CodeLanguage = z.enum(CODE_LANGUAGES);
+
+/**
+ * Where a connector starts or ends: the key of a node (in this tree or already in
+ * the file), a Figma node id, or a point on the canvas. A magnet picks the side.
+ */
+export const ConnectorEnd = z.union([
+  z.string(),
+  z.object({ key: z.string(), magnet: Magnet.optional() }),
+  z.object({ id: z.string(), magnet: Magnet.optional() }),
+  z.object({ x: z.number(), y: z.number() }),
+]);
+
+const jamSize = z.number().positive();
+
+export const StickyNode = z.object({
+  ...jamBase,
+  ...jamText,
+  type: z.literal("sticky"),
+  fill: Fill.optional(),
+  /** The wide rectangle rather than the square. */
+  wide: z.boolean().optional(),
+  /** Show the author's name on the sticky. */
+  author: z.boolean().optional(),
+});
+
+export const ShapeNode = z.object({
+  ...jamBase,
+  ...jamText,
+  type: z.literal("shape"),
+  shape: ShapeKind.optional(),
+  w: jamSize.optional(),
+  h: jamSize.optional(),
+  rotation: base.rotation,
+  fill: Fill.optional(),
+  stroke: Stroke.optional(),
+});
+
+export const ConnectorNode = z.object({
+  ...jamBase,
+  type: z.literal("connector"),
+  from: ConnectorEnd,
+  to: ConnectorEnd,
+  line: ConnectorLine.optional(),
+  startCap: ConnectorCap.optional(),
+  endCap: ConnectorCap.optional(),
+  /** The label on the line. */
+  text: z.string().optional(),
+  stroke: Stroke.optional(),
+});
+
+/** A cell is its text, or an object when it wants a fill or text colour of its own. */
+export const TableCell = z.union([
+  z.string(),
+  z.object({ text: z.string(), fill: Fill.optional(), color: typography.color }),
+]);
+
+export const TableNode = z.object({
+  ...jamBase,
+  type: z.literal("table"),
+  /** One array of cells per row. Short rows are padded with empty cells. */
+  rows: z.array(z.array(TableCell)).min(1),
+  colWidths: z.array(jamSize).optional(),
+  rowHeights: z.array(jamSize).optional(),
+  fill: Fill.optional(),
+  font: typography.font,
+  size: typography.size,
+  color: typography.color,
+});
+
+export const CodeNode = z.object({
+  ...jamBase,
+  type: z.literal("code"),
+  code: z.string(),
+  language: CodeLanguage.optional(),
+});
+
+/** An animated GIF: `src` is a file path or a data URI. */
+export const GifNode = z.object({
+  ...jamBase,
+  type: z.literal("gif"),
+  src: z.string(),
+  srcRef: z.string().optional(),
+  w: jamSize.optional(),
+  h: jamSize.optional(),
+});
+
+/** A pasted link: FigJam turns it into an embed or a preview card. */
+export const LinkNode = z.object({
+  ...jamBase,
+  type: z.literal("link"),
+  url: z.string().url(),
+});
+
 /** Everything `patch` can set on a node that already exists. */
 export const NodeProps = z.object({
   ...base,
@@ -169,6 +299,19 @@ export const NodeProps = z.object({
   ...container,
   ...typography,
   text: z.string().optional(),
+  shape: ShapeKind.optional(),
+  wide: z.boolean().optional(),
+  author: z.boolean().optional(),
+  from: ConnectorEnd.optional(),
+  to: ConnectorEnd.optional(),
+  line: ConnectorLine.optional(),
+  startCap: ConnectorCap.optional(),
+  endCap: ConnectorCap.optional(),
+  rows: TableNode.shape.rows.optional(),
+  colWidths: TableNode.shape.colWidths,
+  rowHeights: TableNode.shape.rowHeights,
+  code: z.string().optional(),
+  language: CodeLanguage.optional(),
   src: z.string().optional(),
   srcRef: z.string().optional(),
   fit: ImageNode.shape.fit,
@@ -186,10 +329,48 @@ const FrameBase = z.object({
 
 /** Explicit, because `children` makes the type recursive. */
 export type FrameNode = z.infer<typeof FrameBase> & { children?: UINode[] };
+
+/** FigJam's container for part of a board. */
+const SectionBase = z.object({
+  ...jamBase,
+  type: z.literal("section"),
+  w: jamSize.optional(),
+  h: jamSize.optional(),
+  fill: Fill.optional(),
+  stroke: Stroke.optional(),
+  radius: SizeValue.optional(),
+  /**
+   * Places the children for you, without Figma's own auto layout: dir, gap, pad,
+   * align and wrap. A child with `at` stays where it is. Padding defaults to 24.
+   */
+  layout: Layout.optional(),
+});
+export type SectionNode = z.infer<typeof SectionBase> & { children?: UINode[] };
+
 export type UINode =
-  FrameNode | TextNode | RectNode | EllipseNode | InstanceNode | SvgNode | ImageNode;
+  | FrameNode
+  | TextNode
+  | RectNode
+  | EllipseNode
+  | InstanceNode
+  | SvgNode
+  | ImageNode
+  | SectionNode
+  | StickyNode
+  | ShapeNode
+  | ConnectorNode
+  | TableNode
+  | CodeNode
+  | LinkNode
+  | GifNode;
 
 export const FrameNode = FrameBase.extend({
+  get children(): z.ZodOptional<z.ZodArray<z.ZodType<UINode>>> {
+    return z.array(UINode).optional();
+  },
+});
+
+export const SectionNode = SectionBase.extend({
   get children(): z.ZodOptional<z.ZodArray<z.ZodType<UINode>>> {
     return z.array(UINode).optional();
   },
@@ -203,6 +384,14 @@ export const UINode: z.ZodType<UINode> = z.discriminatedUnion("type", [
   InstanceNode,
   SvgNode,
   ImageNode,
+  SectionNode,
+  StickyNode,
+  ShapeNode,
+  ConnectorNode,
+  TableNode,
+  CodeNode,
+  LinkNode,
+  GifNode,
 ]);
 
 export type Hex = z.infer<typeof Hex>;
@@ -222,3 +411,17 @@ export type InstanceNode = z.infer<typeof InstanceNode>;
 export type SvgNode = z.infer<typeof SvgNode>;
 export type ImageNode = z.infer<typeof ImageNode>;
 export type TokenRef = z.infer<typeof TokenRef>;
+export type StickyNode = z.infer<typeof StickyNode>;
+export type ShapeNode = z.infer<typeof ShapeNode>;
+export type ConnectorNode = z.infer<typeof ConnectorNode>;
+export type ConnectorEnd = z.infer<typeof ConnectorEnd>;
+export type TableNode = z.infer<typeof TableNode>;
+export type CodeNode = z.infer<typeof CodeNode>;
+export type LinkNode = z.infer<typeof LinkNode>;
+export type GifNode = z.infer<typeof GifNode>;
+export type TableCell = z.infer<typeof TableCell>;
+export type ShapeKind = z.infer<typeof ShapeKind>;
+export type ConnectorLine = z.infer<typeof ConnectorLine>;
+export type ConnectorCap = z.infer<typeof ConnectorCap>;
+export type Magnet = z.infer<typeof Magnet>;
+export type CodeLanguage = z.infer<typeof CodeLanguage>;

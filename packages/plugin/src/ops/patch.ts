@@ -11,6 +11,7 @@ import {
   pin,
   type Deferred,
 } from "../figma/build";
+import { fixedSize, settleSection } from "../figma/jam";
 import { NodeIndex } from "../figma/target";
 
 export async function patch(params: PatchParams): Promise<PatchResult> {
@@ -70,13 +71,26 @@ async function run(
     case "set": {
       const target = await applyIdentity(node, op.props, keys);
       if (target !== node) index.invalidate();
-      await applyProps(target, op.props);
+      await applyProps(target, op.props, undefined, { keys, deferred });
       applyBounds(target, op.props);
       applyConstraints(target, op.props);
       applySizing(target, op.props.w, "Horizontal");
       applySizing(target, op.props.h, "Vertical");
       applyRotation(target, op.props);
       if (op.props.at) deferred.push(() => pin(target, op.props.at));
+      if (target.type === "SECTION" && op.props.layout) {
+        const props = op.props;
+        deferred.push(() => {
+          const section = target as SectionNode;
+          const fixed = fixedSize(props);
+          // Wrapping breaks at the section's own size when the patch gives none.
+          if (props.layout?.wrap) {
+            if (props.layout.dir === "horizontal") fixed.w ??= section.width;
+            else fixed.h ??= section.height;
+          }
+          settleSection(section, props.layout, new Set(), fixed);
+        });
+      }
       touched.push(target);
       break;
     }

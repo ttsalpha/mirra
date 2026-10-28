@@ -1,4 +1,4 @@
-import type { ErrorBody, OpName } from "@mirra/schema";
+import type { EditorType, ErrorBody, OpName } from "@mirra/schema";
 
 export type UiToMain =
   | { kind: "ready" }
@@ -12,6 +12,7 @@ export type MainToUi =
       protocolVersion: number;
       fileName: string;
       fileKey: string | null;
+      editorType: EditorType;
     }
   | { kind: "response"; id: string; ok: true; result: unknown }
   | { kind: "response"; id: string; ok: false; error: ErrorBody };
