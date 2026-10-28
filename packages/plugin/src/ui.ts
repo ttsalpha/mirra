@@ -12,6 +12,7 @@ type Status = "offline" | "connecting" | "online";
 let context: Extract<MainToUi, { kind: "context" }> | null = null;
 let inflight: Promise<void> | null = null;
 let connectingLabel = "Connecting…";
+let status: Status | null = null;
 const logs: string[] = [];
 
 /** Every server that answered, so two clients can drive one Figma file. */
@@ -91,7 +92,8 @@ function scan(): Promise<void> {
 }
 
 async function runScan(): Promise<void> {
-  if (!sockets.size) setStatus("connecting");
+  // A rescan from the background leaves "Disconnected" and its hint standing, rather than flashing.
+  if (!sockets.size && status !== "offline") setStatus("connecting");
   await Promise.all(PORTS.filter((port) => !sockets.has(port)).map(open));
 
   if (sockets.size) return setStatus("online");
@@ -177,6 +179,7 @@ async function probe(port: number): Promise<void> {
 }
 
 function setStatus(next: Status): void {
+  status = next;
   dot.className = `dot ${next}`;
 
   const ports = [...sockets.keys()].sort((a, b) => a - b);
