@@ -19,17 +19,20 @@ beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "mirra-figma-"));
   figmaRunning = false;
   process.env["HOME"] = home;
+  vi.stubEnv("APPDATA", undefined);
+  vi.stubEnv("LOCALAPPDATA", undefined);
   vi.resetModules();
 });
 
 afterEach(() => {
   delete process.env["HOME"];
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
 async function settingsFile(value: unknown): Promise<string> {
-  const { FIGMA_SETTINGS } = await load();
-  const path = FIGMA_SETTINGS;
+  const { settingsCandidates } = await load();
+  const path = settingsCandidates()[0]!;
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(value, null, 2));
   return path;
@@ -38,6 +41,15 @@ async function settingsFile(value: unknown): Promise<string> {
 async function load() {
   return import("./figma-settings.js");
 }
+
+test("on Windows the Roaming folder is tried before Local", async () => {
+  const { settingsCandidates } = await load();
+
+  expect(settingsCandidates("win32")).toEqual([
+    join(home, "AppData/Roaming/Figma/settings.json"),
+    join(home, "AppData/Local/Figma/settings.json"),
+  ]);
+});
 
 const pluginDir = () => join(home, ".mirra/plugin");
 
@@ -120,6 +132,15 @@ test("a missing settings file is reported, not thrown", async () => {
   const { registerPluginWithFigma } = await load();
   const outcome = await registerPluginWithFigma(pluginDir());
   expect(outcome.status).toBe("skipped");
+});
+
+test("an unreadable settings file is reported rather than skipped over", async () => {
+  const { settingsCandidates, registerPluginWithFigma } = await load();
+  await mkdir(settingsCandidates()[0]!, { recursive: true });
+
+  const outcome = await registerPluginWithFigma(pluginDir());
+
+  expect(outcome).toMatchObject({ status: "skipped", reason: expect.stringContaining("EISDIR") });
 });
 
 test("a running Figma is left untouched", async () => {

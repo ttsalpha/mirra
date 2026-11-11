@@ -4,19 +4,29 @@ import { homedir } from "node:os";
 import { dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
 
+import { appDataDir } from "./app-data.js";
 import { MIRRA_HOME } from "./install.js";
 
-export const FIGMA_SETTINGS = settingsPath();
-
-function settingsPath(): string {
-  if (process.platform === "darwin") {
-    return join(homedir(), "Library/Application Support/Figma/settings.json");
-  }
-  if (process.platform === "win32") {
+/** Roaming first on Windows; Local for odd installs. */
+export function settingsCandidates(platform: NodeJS.Platform = process.platform): string[] {
+  if (platform === "darwin") return [join(appDataDir(platform), "Figma/settings.json")];
+  if (platform === "win32") {
     const local = process.env["LOCALAPPDATA"] ?? join(homedir(), "AppData/Local");
-    return join(local, "Figma/settings.json");
+    return [join(appDataDir(platform), "Figma/settings.json"), join(local, "Figma/settings.json")];
   }
-  return join(homedir(), ".config/Figma/settings.json");
+  return [join(homedir(), ".config/Figma/settings.json")];
+}
+
+/** Only a missing file falls through; a locked one would hide the real settings. */
+async function findSettings(): Promise<{ path: string; raw: string } | null> {
+  for (const path of settingsCandidates()) {
+    try {
+      return { path, raw: await readFile(path, "utf8") };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return null;
 }
 
 const PLUGIN_ID = "mirra-figma-bridge";
@@ -45,12 +55,19 @@ export async function registerPluginWithFigma(pluginDir: string): Promise<Regist
     return { status: "skipped", reason: "Figma Desktop is running; quit it first" };
   }
 
-  let raw: string;
+  let found: Awaited<ReturnType<typeof findSettings>>;
   try {
-    raw = await readFile(FIGMA_SETTINGS, "utf8");
-  } catch {
-    return { status: "skipped", reason: `no settings file at ${FIGMA_SETTINGS}` };
+    found = await findSettings();
+  } catch (error) {
+    return { status: "skipped", reason: error instanceof Error ? error.message : String(error) };
   }
+  if (!found) {
+    return {
+      status: "skipped",
+      reason: `no settings file at ${settingsCandidates().join(" or ")}`,
+    };
+  }
+  const { path: settingsFile, raw } = found;
 
   try {
     const settings: Record<string, unknown> = JSON.parse(raw);
@@ -63,9 +80,9 @@ export async function registerPluginWithFigma(pluginDir: string): Promise<Regist
     if (!next) return { status: "already" };
 
     settings["localFileExtensions"] = next;
-    const temporary = join(dirname(FIGMA_SETTINGS), `.mirra-${process.pid}.json`);
+    const temporary = join(dirname(settingsFile), `.mirra-${process.pid}.json`);
     await writeFile(temporary, JSON.stringify(settings, null, 2));
-    await rename(temporary, FIGMA_SETTINGS);
+    await rename(temporary, settingsFile);
     return { status: "registered" };
   } catch (error) {
     return { status: "skipped", reason: error instanceof Error ? error.message : String(error) };
