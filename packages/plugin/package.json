@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@figma/plugin-typings": "1.142.0",
-    "esbuild": "0.25.12"
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2"
   }
 }
