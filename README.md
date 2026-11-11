@@ -22,7 +22,7 @@ Requires Figma Desktop (macOS or Windows) and Node 24+.
 <details>
 <summary>Install notes</summary>
 
-- Adds Mirra to Claude Desktop, Claude Code, Cursor, VS Code and Antigravity (`--no-config` skips)
+- Adds Mirra to Claude Desktop, Claude Code, Cursor, VS Code, Antigravity and Codex / ChatGPT desktop (`--no-config` skips)
 - Figma open during `init`: import by hand, **Plugins → Development → Import plugin from
   manifest…** → `~/.mirra/plugin/manifest.json`
 - Upgrading: run `init` again
