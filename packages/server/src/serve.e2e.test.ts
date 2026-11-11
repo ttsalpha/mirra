@@ -55,6 +55,17 @@ test("no tool schema uses tuple-style items, which Claude rejects along with the
   expect(tupleItems).toEqual([]);
 });
 
+test("a tree parameter is typed as an object, not a bare $ref", async () => {
+  client = await startServer(await freePort());
+
+  const tools = (await client.listTools()).tools;
+  const render = tools.find((tool) => tool.name === "mirra_render");
+  const patch = JSON.stringify(tools.find((tool) => tool.name === "mirra_patch")?.inputSchema);
+
+  expect(render?.inputSchema.properties?.["tree"]).toMatchObject({ type: "object" });
+  expect(patch).not.toMatch(/"tree":\{"\$ref"/);
+});
+
 test("mirra_render forwards a validated tree and reports the keys it created", async () => {
   const port = await freePort();
   client = await startServer(port);

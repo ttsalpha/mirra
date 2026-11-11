@@ -17,7 +17,9 @@ export class NodeIndex {
       const node = await figma.getNodeByIdAsync(target.id);
       if (!node) throw new Error(`No node with id ${target.id} in this file`);
       if (node.type === "DOCUMENT" || node.type === "PAGE") {
-        throw new Error(`${node.type} is not a layer: target a frame or a shape`);
+        throw new Error(
+          `${node.type} is not a layer: target a frame or a shape; mirra_render adds to a page`,
+        );
       }
       return node as SceneNode;
     }

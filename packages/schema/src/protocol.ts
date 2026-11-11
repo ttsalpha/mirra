@@ -64,8 +64,11 @@ export type LogMessage = z.infer<typeof LogMessage>;
 export const PluginMessage = z.union([ResponseEnvelope, HelloMessage, LogMessage]);
 export type PluginMessage = z.infer<typeof PluginMessage>;
 
+/** A bare `$ref` has no type, so clients send the tree as a JSON string. */
+const Tree = UINode.meta({ type: "object" });
+
 export const RenderParams = z.object({
-  tree: UINode,
+  tree: Tree,
   /** Where to put the root. Defaults to the current page. */
   parentId: z.string().optional(),
   /** Absolute position for the root; defaults to the middle of the viewport. */
@@ -92,11 +95,11 @@ export const PatchOp = z.discriminatedUnion("op", [
   z.object({
     op: z.literal("append"),
     target: Target,
-    tree: UINode,
+    tree: Tree,
     /** Position among the existing children; appended last by default. */
     index: z.number().int().nonnegative().optional(),
   }),
-  z.object({ op: z.literal("replace"), target: Target, tree: UINode }),
+  z.object({ op: z.literal("replace"), target: Target, tree: Tree }),
   z.object({ op: z.literal("remove"), target: Target }),
   z.object({
     op: z.literal("component"),
