@@ -41,6 +41,20 @@ test("mirra_ping reports the file the plugin has open", async () => {
   expect(JSON.stringify(result.content)).toContain("Design file");
 });
 
+test("no tool schema uses tuple-style items, which Claude rejects along with the tool", async () => {
+  client = await startServer(await freePort());
+
+  const tupleItems: string[] = [];
+  const walk = (node: unknown, path: string): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray((node as { items?: unknown }).items)) tupleItems.push(`${path}/items`);
+    for (const [key, value] of Object.entries(node)) walk(value, `${path}/${key}`);
+  };
+  for (const tool of (await client.listTools()).tools) walk(tool.inputSchema, tool.name);
+
+  expect(tupleItems).toEqual([]);
+});
+
 test("mirra_render forwards a validated tree and reports the keys it created", async () => {
   const port = await freePort();
   client = await startServer(port);

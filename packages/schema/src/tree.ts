@@ -13,6 +13,15 @@ function keysOf<T extends Record<string, string>>(map: T) {
   return z.enum(keys);
 }
 
+type Repeat<T, N extends number, Acc extends T[] = []> = Acc["length"] extends N
+  ? Acc
+  : Repeat<T, N, [...Acc, T]>;
+
+/** Not `z.tuple`: its draft-07 `items: [...]` makes Claude drop the tool. */
+function fixedList<T extends z.ZodType, N extends number>(item: T, length: N) {
+  return z.array(item).length(length) as unknown as z.ZodType<Repeat<z.infer<T>, N>>;
+}
+
 /** `#rgb`, `#rrggbb` or `#rrggbbaa`. */
 export const Hex = z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
 
@@ -70,11 +79,7 @@ export const Effect = z.union([ShadowEffect, BlurEffect]);
 export const Sizing = z.union([z.number().nonnegative(), z.literal("fill"), z.literal("hug")]);
 
 /** One value for all sides, [vertical, horizontal], or [top, right, bottom, left]. */
-export const Padding = z.union([
-  NumberValue,
-  z.tuple([NumberValue, NumberValue]),
-  z.tuple([NumberValue, NumberValue, NumberValue, NumberValue]),
-]);
+export const Padding = z.union([NumberValue, fixedList(NumberValue, 2), fixedList(NumberValue, 4)]);
 
 export const Layout = z.object({
   dir: z.enum(["horizontal", "vertical"]),
@@ -90,7 +95,7 @@ export const Layout = z.object({
 });
 
 /** One number rounds every corner; four go clockwise from the top left. */
-export const Radius = z.union([SizeValue, z.tuple([SizeValue, SizeValue, SizeValue, SizeValue])]);
+export const Radius = z.union([SizeValue, fixedList(SizeValue, 4)]);
 
 export const ConstraintSide = z.enum(["min", "center", "max", "stretch", "scale"]);
 
