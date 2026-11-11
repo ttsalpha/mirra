@@ -152,6 +152,42 @@ test("layout applies to a component as it does to a frame", async () => {
   expect([component.paddingTop, component.paddingRight]).toEqual([0, 2]);
 });
 
+test("a patch may change padding without restating the direction", async () => {
+  const root = await renderCard();
+
+  await patch({ ops: [{ op: "set", target: { key: "card" }, props: { layout: { pad: 4 } } }] });
+
+  expect(await treeOf(root)).toMatchObject({ layout: { dir: "vertical", gap: 8, pad: 4 } });
+});
+
+test("a layout without a direction is refused where there is no auto layout yet", async () => {
+  await renderCard();
+
+  await expect(
+    patch({ ops: [{ op: "set", target: { key: "divider" }, props: { layout: { pad: 4 } } }] }),
+  ).rejects.toThrow();
+});
+
+test("a new frame without a layout direction is refused before anything is built", async () => {
+  const root = await renderCard();
+  const before = fake.page.children.length;
+
+  await expect(
+    patch({
+      ops: [
+        {
+          op: "append",
+          target: { key: "card" },
+          tree: { type: "frame", children: [{ type: "frame", layout: { gap: 4 } }] },
+        },
+      ],
+    }),
+  ).rejects.toThrow(/layout\.dir is required/);
+
+  expect(fake.page.children.length).toBe(before);
+  expect((await treeOf(root)).children).toHaveLength(2);
+});
+
 test("screenshot exports the target and reports its size", async () => {
   const root = await renderCard();
 

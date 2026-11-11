@@ -344,6 +344,8 @@ export function settleSection(
   const pad = padding(layout);
 
   if (layout) {
+    if (!layout.dir)
+      throw new Error("layout.dir is required: a section does not remember its direction");
     const flow = section.children.filter(
       (child) => child.type !== "CONNECTOR" && !pinned.has(child),
     );

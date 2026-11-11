@@ -10,6 +10,7 @@ import {
   buildNode,
   pin,
   type Deferred,
+  assertLayoutDirections,
   resetComponentCatalog,
 } from "../figma/build";
 import { fixedSize, settleSection } from "../figma/jam";
@@ -97,6 +98,7 @@ async function run(
       break;
     }
     case "append": {
+      assertLayoutDirections(op.tree);
       const child = await buildNode(op.tree, asContainer(node), keys, undefined, deferred);
       if (op.index !== undefined) asContainer(node).insertChild(op.index, child);
       index.invalidate();
@@ -109,6 +111,7 @@ async function run(
         throw new Error(`${node.name} has no parent to replace it in`);
       }
       const at = parent.children.indexOf(node);
+      assertLayoutDirections(op.tree);
       const created = await buildNode(op.tree, parent, keys, undefined, deferred);
       parent.insertChild(at, created);
       node.remove();

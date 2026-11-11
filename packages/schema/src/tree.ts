@@ -82,7 +82,8 @@ export const Sizing = z.union([z.number().nonnegative(), z.literal("fill"), z.li
 export const Padding = z.union([NumberValue, fixedList(NumberValue, 2), fixedList(NumberValue, 4)]);
 
 export const Layout = z.object({
-  dir: z.enum(["horizontal", "vertical"]),
+  /** Only needed to turn auto layout on. */
+  dir: z.enum(["horizontal", "vertical"]).optional(),
   gap: SizeValue.optional(),
   pad: Padding.optional(),
   /** Along the layout direction. */
@@ -171,7 +172,7 @@ export const ImageNode = z.object({
 });
 
 const instance = {
-  /** Node id, "Set/Variant" path, or set name (default variant). */
+  /** Node id, library key, "Set/Variant" path, or set name (default variant). */
   component: z.string(),
   /** Component properties, by the name Figma shows (without its id suffix). */
   properties: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),

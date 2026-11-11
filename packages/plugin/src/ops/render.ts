@@ -1,7 +1,13 @@
 import type { RenderParams, RenderResult, UINode } from "@mirra/schema";
-import { buildNode, resetComponentCatalog, type Deferred } from "../figma/build";
+import {
+  assertLayoutDirections,
+  buildNode,
+  resetComponentCatalog,
+  type Deferred,
+} from "../figma/build";
 
 export async function render(params: RenderParams): Promise<RenderResult> {
+  assertLayoutDirections(params.tree);
   resetComponentCatalog();
   const parent = params.parentId ? await resolveParent(params.parentId) : figma.currentPage;
   const keys: Record<string, string> = {};

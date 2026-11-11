@@ -509,6 +509,7 @@ export type FakeFigma = {
   textStyles: FakeTextStyle[];
   paintStyles: { id: string; name: string; paints: unknown[] }[];
   addComponent(name: string, page?: FakePage): void;
+  addLibraryComponent(key: string, name: string): void;
   addComponentSet(name: string, variants: string[], page?: FakePage): void;
   /** Cast at the call site: the node classes stay private to this file. */
   addGroup(name: string): unknown;
@@ -536,6 +537,11 @@ export function installFakeFigma(): FakeFigma {
       const component = new FakeComponent();
       component.name = name;
       onPage.appendChild(component);
+    },
+    addLibraryComponent: (key: string, name: string) => {
+      const component = new FakeComponent();
+      component.name = name;
+      library.set(key, component);
     },
     addComponentSet: (name: string, variants: string[], onPage: FakePage = page) => {
       const set = new FakeComponentSet();
@@ -577,6 +583,8 @@ export function installFakeFigma(): FakeFigma {
       return variable;
     },
   };
+
+  const library = new Map<string, FakeComponent>();
 
   const nodesById = () => {
     const found = new Map<string, FakeNode>();
@@ -639,6 +647,14 @@ export function installFakeFigma(): FakeFigma {
       node.parent?.appendChild(component);
       node.remove();
       return track(component);
+    },
+    importComponentByKeyAsync: async (key: string) => {
+      const component = library.get(key);
+      if (!component) throw new Error(`Component with key ${key} not found`);
+      return component;
+    },
+    importComponentSetByKeyAsync: async (key: string) => {
+      throw new Error(`Component set with key ${key} not found`);
     },
     createNodeFromSvg: (markup: string) => {
       const frame = new FakeSvgFrame();

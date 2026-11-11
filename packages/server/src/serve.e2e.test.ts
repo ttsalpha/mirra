@@ -55,15 +55,26 @@ test("no tool schema uses tuple-style items, which Claude rejects along with the
   expect(tupleItems).toEqual([]);
 });
 
-test("a tree parameter is typed as an object, not a bare $ref", async () => {
+test("every property schema says what it is, since clients guess from the type", async () => {
   client = await startServer(await freePort());
 
-  const tools = (await client.listTools()).tools;
-  const render = tools.find((tool) => tool.name === "mirra_render");
-  const patch = JSON.stringify(tools.find((tool) => tool.name === "mirra_patch")?.inputSchema);
+  const typed = ["type", "anyOf", "oneOf", "allOf", "enum", "const"];
+  const untyped: string[] = [];
+  const walk = (node: unknown, path: string): void => {
+    if (!node || typeof node !== "object") return;
+    for (const [key, value] of Object.entries(node)) {
+      const isMap = key === "properties" && (node as { type?: unknown }).type === "object";
+      if (isMap && value && typeof value === "object") {
+        for (const [name, schema] of Object.entries(value)) {
+          if (!typed.some((field) => field in (schema as object))) untyped.push(`${path}/${name}`);
+          walk(schema, `${path}/${name}`);
+        }
+      } else walk(value, `${path}/${key}`);
+    }
+  };
+  for (const tool of (await client.listTools()).tools) walk(tool.inputSchema, tool.name);
 
-  expect(render?.inputSchema.properties?.["tree"]).toMatchObject({ type: "object" });
-  expect(patch).not.toMatch(/"tree":\{"\$ref"/);
+  expect(untyped).toEqual([]);
 });
 
 test("mirra_render forwards a validated tree and reports the keys it created", async () => {

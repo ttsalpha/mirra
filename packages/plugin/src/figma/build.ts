@@ -164,6 +164,14 @@ function remember(node: SceneNode, spec: { src: string; srcRef?: string; type: s
   else if (spec.src.length <= MAX_REMEMBERED_SOURCE) node.setPluginData(field, spec.src);
 }
 
+/** Run before building, so a bad tree leaves nothing behind. */
+export function assertLayoutDirections(spec: UINode): void {
+  if ("layout" in spec && spec.layout && !spec.layout.dir && spec.type === "frame") {
+    throw new Error(`layout.dir is required on a new frame${spec.key ? ` (${spec.key})` : ""}`);
+  }
+  if ("children" in spec) spec.children?.forEach(assertLayoutDirections);
+}
+
 type Catalog = { components: ComponentNode[]; sets: ComponentSetNode[] };
 
 let here: Catalog | null = null;
@@ -210,16 +218,41 @@ export async function findComponent(name: string): Promise<ComponentNode> {
   }
   if (found[0]) return componentOf(found[0], name);
 
-  const all = [here, await otherPages()];
+  if (/^[0-9a-f]{40}$/.test(name)) return importFromLibrary(name);
+  throw new Error(`No component named "${name}" in this file${await suggestions(name)}`);
+}
+
+async function importFromLibrary(key: string): Promise<ComponentNode> {
+  try {
+    return await figma.importComponentByKeyAsync(key);
+  } catch (componentError) {
+    try {
+      return componentOf(await figma.importComponentSetByKeyAsync(key), key);
+    } catch {
+      const cause = componentError instanceof Error ? componentError.message : componentError;
+      throw new Error(`No component or set with key ${key} in an enabled library (${cause})`);
+    }
+  }
+}
+
+/** Closest names first. */
+async function suggestions(name: string): Promise<string> {
+  const all = [here!, await otherPages()];
   const names = [
     ...new Set(
       all.flatMap((c) => [...c.sets.map((set) => set.name), ...c.components.map(componentPath)]),
     ),
   ];
-  const available = names.slice(0, 10).join(", ");
-  throw new Error(
-    `No component named "${name}" in this file${available ? `. Found: ${available}` : ""}`,
-  );
+  if (!names.length) return "";
+
+  const wanted = name.toLowerCase();
+  const close = (candidate: string) => {
+    const lower = candidate.toLowerCase();
+    return lower.includes(wanted) ? 0 : 1;
+  };
+  const ranked = names.sort((a, b) => close(a) - close(b) || a.localeCompare(b));
+  const more = ranked.length > 10 ? ` (+${ranked.length - 10} more)` : "";
+  return `. Found: ${ranked.slice(0, 10).join(", ")}${more}`;
 }
 
 function matches(catalog: Catalog, name: string): (ComponentNode | ComponentSetNode)[] {
@@ -466,7 +499,10 @@ async function applyLayout(
   if (!layout) return;
 
   const { dir, gap, pad, justify, align, wrap } = layout;
-  frame.layoutMode = dir === "horizontal" ? "HORIZONTAL" : "VERTICAL";
+  if (dir) frame.layoutMode = dir === "horizontal" ? "HORIZONTAL" : "VERTICAL";
+  else if (frame.layoutMode === "NONE") {
+    throw new Error(`layout.dir is required: ${frame.name} has no auto layout yet`);
+  }
   if (gap !== undefined) await setNumbers(frame, { itemSpacing: gap }, tokens);
   if (pad !== undefined) {
     const { top, right, bottom, left } = toPadding(pad);

@@ -7,7 +7,7 @@ import { describeError, text } from "./text.js";
 
 const DESCRIPTION = `Build a whole screen in the open Figma file, or a board in FigJam, from one declarative tree.
 
-The tree mirrors flexbox: a frame carries layout {dir, gap, pad, justify, align}, and a
+The tree mirrors flexbox: a frame carries layout {dir, gap, pad, justify, align} (dir is required on a new frame), and a
 child sizes itself with w/h set to a number, "fill" or "hug". Node types are frame, text,
 rect, ellipse, instance, svg and image. Colours are hex strings; fill also takes
 {type:"gradient", stops}. A "$name" binds a variable: a colour on fill, stroke or text

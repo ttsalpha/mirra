@@ -175,6 +175,32 @@ test("a variant is still addressed by its full path", async () => {
   expect(node.name).toBe("Variant=ghost");
 });
 
+test("a local component named like a key is found before the library is asked", async () => {
+  const name = "c".repeat(40);
+  fake.addComponent(name);
+
+  expect((await build({ type: "instance", component: name })).type).toBe("INSTANCE");
+});
+
+test("a library component is imported by its key", async () => {
+  const key = "a".repeat(40);
+  fake.addLibraryComponent(key, "Icon");
+
+  expect((await build({ type: "instance", component: key })).name).toBe("Icon");
+  await expect(build({ type: "instance", component: "b".repeat(40) })).rejects.toThrow(
+    /enabled library/,
+  );
+});
+
+test("the closest names come first in the hint, and the rest are counted", async () => {
+  for (let i = 0; i < 12; i += 1) fake.addComponent(`Aaa ${i}`);
+  fake.addComponent("Zebra Button");
+
+  await expect(build({ type: "instance", component: "Button" })).rejects.toThrow(
+    /Found: Zebra Button, Aaa 0.*\(\+3 more\)/,
+  );
+});
+
 test("a set and a component sharing a name are ambiguous, not silently ranked", async () => {
   fake.addComponent("Button");
   fake.addComponentSet("Button", ["Variant=primary"]);
