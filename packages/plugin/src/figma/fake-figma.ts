@@ -77,7 +77,7 @@ class FakeCorners extends FakeNode {
 }
 
 class FakeFrame extends FakeCorners {
-  readonly type = "FRAME";
+  readonly type: string = "FRAME";
   name = "Frame";
   // Figma hands every new frame an opaque white fill.
   fills: unknown[] = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 1 }];
@@ -140,10 +140,9 @@ class FakeSlice extends FakeNode {
   name = "Slice";
 }
 
-class FakeComponent extends FakeNode {
-  readonly type = "COMPONENT";
+class FakeComponent extends FakeFrame {
+  readonly type: string = "COMPONENT";
   name = "Component";
-  children: FakeNode[] = [];
 
   createInstance(): FakeInstance {
     const instance = new FakeInstance();

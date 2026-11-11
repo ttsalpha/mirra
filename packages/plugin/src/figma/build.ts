@@ -298,10 +298,12 @@ export async function applyProps(
 
   if (props.layout !== undefined || props.clip !== undefined) {
     // A section is laid out after its children are in, by buildNode and patch.
-    if (node.type !== "FRAME" && node.type !== "SECTION") {
-      throw new Error(`layout and clip only apply to a frame, not a ${low(node)}`);
+    if (!hostsLayout(node) && node.type !== "SECTION") {
+      throw new Error(
+        `layout and clip only apply to a frame, component or instance, not a ${low(node)}`,
+      );
     }
-    if (node.type === "FRAME") await applyLayout(node, props.layout, props.clip, tokens);
+    if (hostsLayout(node)) await applyLayout(node, props.layout, props.clip, tokens);
   }
 
   await applyPaint(node, props, tokens);
@@ -382,8 +384,19 @@ async function applyText(text: TextNode, props: NodeProps, tokens: TokenIndex): 
   }
 }
 
+type LayoutHost = FrameNode | ComponentNode | ComponentSetNode | InstanceNode;
+
+export function hostsLayout(node: SceneNode): node is LayoutHost {
+  return (
+    node.type === "FRAME" ||
+    node.type === "COMPONENT" ||
+    node.type === "COMPONENT_SET" ||
+    node.type === "INSTANCE"
+  );
+}
+
 async function applyLayout(
-  frame: FrameNode,
+  frame: LayoutHost,
   layout: Layout | undefined,
   clip: boolean | undefined,
   tokens: TokenIndex,

@@ -136,6 +136,22 @@ test("properties that do not apply to the node type are refused by name", async 
   ).rejects.toThrow(/only apply to a text node/);
 });
 
+test("layout applies to a component as it does to a frame", async () => {
+  await renderCard();
+  await patch({ ops: [{ op: "component", target: { key: "card" } }] });
+
+  await patch({
+    ops: [
+      { op: "set", target: { key: "card" }, props: { layout: { dir: "horizontal", pad: [0, 2] } } },
+    ],
+  });
+
+  const component = fake.page.children[0] as unknown as ComponentNode;
+  expect(component.type).toBe("COMPONENT");
+  expect(component.layoutMode).toBe("HORIZONTAL");
+  expect([component.paddingTop, component.paddingRight]).toEqual([0, 2]);
+});
+
 test("screenshot exports the target and reports its size", async () => {
   const root = await renderCard();
 

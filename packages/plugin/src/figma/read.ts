@@ -1,6 +1,6 @@
 import { CONNECTOR_CAPS, CONNECTOR_LINES, MAGNETS, SHAPE_TYPES } from "@mirra/schema/constants";
 import type { ConnectorEnd, Layout, Sizing, TextNode as TextSpec, UINode } from "@mirra/schema";
-import { COMPONENT_FIELD, KEY_FIELD, SRC_FIELD, SVG_FIELD } from "./build";
+import { COMPONENT_FIELD, KEY_FIELD, SRC_FIELD, SVG_FIELD, hostsLayout } from "./build";
 import { readFont } from "./jam";
 import { EMPTY_NAMES, type NameIndex } from "./tokens";
 import {
@@ -518,7 +518,7 @@ function sizing(node: SceneNode): { w?: Sizing; h?: Sizing } {
     parent !== null && "layoutMode" in parent && (parent as FrameNode).layoutMode !== "NONE";
 
   // "fill" needs a parent that lays out; "hug" is the node's own business.
-  const ownsLayout = node.type === "FRAME" && node.layoutMode !== "NONE";
+  const ownsLayout = hostsLayout(node) && node.layoutMode !== "NONE";
   const axis = (fixed: number, mode: "FIXED" | "HUG" | "FILL" | undefined): Sizing => {
     if (mode === "HUG" && (inAutoLayout || ownsLayout)) return "hug";
     if (mode === "FILL" && inAutoLayout) return "fill";
