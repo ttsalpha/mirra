@@ -151,6 +151,15 @@ class FakeComponent extends FakeFrame {
   }
 }
 
+class FakeComponentSet extends FakeFrame {
+  readonly type: string = "COMPONENT_SET";
+  name = "Component set";
+
+  get defaultVariant(): FakeComponent {
+    return this.children[0] as FakeComponent;
+  }
+}
+
 class FakeInstance extends FakeNode {
   readonly type = "INSTANCE";
   name = "Instance";
@@ -417,7 +426,7 @@ class FakeSection extends FakeNode {
 
 class FakePage {
   readonly type = "PAGE";
-  readonly id = "0:1";
+  id = "0:1";
   name = "Page 1";
   children: FakeNode[] = [];
   selection: FakeNode[] = [];
@@ -499,7 +508,8 @@ export type FakeFigma = {
   }[];
   textStyles: FakeTextStyle[];
   paintStyles: { id: string; name: string; paints: unknown[] }[];
-  addComponent(name: string): void;
+  addComponent(name: string, page?: FakePage): void;
+  addComponentSet(name: string, variants: string[], page?: FakePage): void;
   /** Cast at the call site: the node classes stay private to this file. */
   addGroup(name: string): unknown;
   addVector(name: string): unknown;
@@ -522,10 +532,20 @@ export function installFakeFigma(): FakeFigma {
     collections: [],
     textStyles: [],
     paintStyles: [],
-    addComponent: (name: string) => {
+    addComponent: (name: string, onPage: FakePage = page) => {
       const component = new FakeComponent();
       component.name = name;
-      page.appendChild(component);
+      onPage.appendChild(component);
+    },
+    addComponentSet: (name: string, variants: string[], onPage: FakePage = page) => {
+      const set = new FakeComponentSet();
+      set.name = name;
+      onPage.appendChild(set);
+      for (const variant of variants) {
+        const component = new FakeComponent();
+        component.name = variant;
+        set.appendChild(component);
+      }
     },
     addGroup: (name: string) => {
       const group = new FakeGroup();
@@ -606,6 +626,7 @@ export function installFakeFigma(): FakeFigma {
     createPage: () => {
       const page = new FakePage();
       page.name = "Page";
+      page.id = `0:${state.pages.length + 1}`;
       state.pages.push(page);
       return page;
     },

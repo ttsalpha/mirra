@@ -164,17 +164,78 @@ function remember(node: SceneNode, spec: { src: string; srcRef?: string; type: s
   else if (spec.src.length <= MAX_REMEMBERED_SOURCE) node.setPluginData(field, spec.src);
 }
 
-/** Components are looked up by name on the current page, variants as "Set/Variant". */
+type Catalog = { components: ComponentNode[]; sets: ComponentSetNode[] };
+
+let here: Catalog | null = null;
+let elsewhere: Promise<Catalog> | null = null;
+
+/** Called per operation: the file may have changed. */
+export function resetComponentCatalog(): void {
+  here = null;
+  elsewhere = null;
+}
+
+function catalogOf(pages: readonly PageNode[]): Catalog {
+  const nodes = pages.flatMap((page) =>
+    page.findAllWithCriteria({ types: ["COMPONENT", "COMPONENT_SET"] }),
+  );
+  return {
+    components: nodes.filter((node): node is ComponentNode => node.type === "COMPONENT"),
+    sets: nodes.filter((node): node is ComponentSetNode => node.type === "COMPONENT_SET"),
+  };
+}
+
+async function otherPages(): Promise<Catalog> {
+  elsewhere ??= (async () => {
+    await figma.loadAllPagesAsync();
+    return catalogOf(figma.root.children.filter((page) => page.id !== figma.currentPage.id));
+  })();
+  return elsewhere;
+}
+
+/** By node id, "Set/Variant" path, or set name (its default variant); current page first. */
 export async function findComponent(name: string): Promise<ComponentNode> {
-  const components = figma.currentPage.findAllWithCriteria({ types: ["COMPONENT"] });
-  const match = components.find((component) => componentPath(component) === name);
-  if (!match) {
-    const available = components.map(componentPath).slice(0, 10).join(", ");
-    throw new Error(
-      `No component named "${name}" on this page${available ? `. Found: ${available}` : ""}`,
-    );
+  if (/^I?\d+:\d+(;\d+:\d+)*$/.test(name)) {
+    const node = await figma.getNodeByIdAsync(name);
+    if (node) return componentOf(node, name);
   }
-  return match;
+
+  here ??= catalogOf([figma.currentPage]);
+  const nearby = matches(here, name);
+  const found = nearby.length ? nearby : matches(await otherPages(), name);
+
+  if (found.length > 1) {
+    const ids = found.map((node) => `${node.id} (${node.type.toLowerCase()})`).join(", ");
+    throw new Error(`"${name}" is ambiguous: ${ids}. Pass a node id instead`);
+  }
+  if (found[0]) return componentOf(found[0], name);
+
+  const all = [here, await otherPages()];
+  const names = [
+    ...new Set(
+      all.flatMap((c) => [...c.sets.map((set) => set.name), ...c.components.map(componentPath)]),
+    ),
+  ];
+  const available = names.slice(0, 10).join(", ");
+  throw new Error(
+    `No component named "${name}" in this file${available ? `. Found: ${available}` : ""}`,
+  );
+}
+
+function matches(catalog: Catalog, name: string): (ComponentNode | ComponentSetNode)[] {
+  return [
+    ...catalog.components.filter((component) => componentPath(component) === name),
+    ...catalog.sets.filter((set) => set.name === name),
+  ];
+}
+
+function componentOf(node: BaseNode, name: string): ComponentNode {
+  if (node.type === "COMPONENT") return node;
+  if (node.type !== "COMPONENT_SET") {
+    throw new Error(`Node ${name} is a ${node.type.toLowerCase()}, not a component`);
+  }
+  if (!node.defaultVariant) throw new Error(`Component set "${node.name}" has no variants`);
+  return node.defaultVariant;
 }
 
 function componentPath(component: ComponentNode): string {

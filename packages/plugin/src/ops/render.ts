@@ -1,7 +1,8 @@
 import type { RenderParams, RenderResult, UINode } from "@mirra/schema";
-import { buildNode, type Deferred } from "../figma/build";
+import { buildNode, resetComponentCatalog, type Deferred } from "../figma/build";
 
 export async function render(params: RenderParams): Promise<RenderResult> {
+  resetComponentCatalog();
   const parent = params.parentId ? await resolveParent(params.parentId) : figma.currentPage;
   const keys: Record<string, string> = {};
   const deferred: Deferred = [];

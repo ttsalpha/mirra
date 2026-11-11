@@ -10,11 +10,13 @@ import {
   buildNode,
   pin,
   type Deferred,
+  resetComponentCatalog,
 } from "../figma/build";
 import { fixedSize, settleSection } from "../figma/jam";
 import { NodeIndex } from "../figma/target";
 
 export async function patch(params: PatchParams): Promise<PatchResult> {
+  resetComponentCatalog();
   const index = new NodeIndex();
   const keys: Record<string, string> = {};
   const touched: SceneNode[] = [];
@@ -119,6 +121,7 @@ async function run(
       const key = node.getPluginData(KEY_FIELD);
       const component = figma.createComponentFromNode(node);
       component.name = op.name ?? node.name;
+      resetComponentCatalog();
       if (key) {
         component.setPluginData(KEY_FIELD, key);
         keys[key] = component.id;

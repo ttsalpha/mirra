@@ -171,7 +171,7 @@ export const ImageNode = z.object({
 });
 
 const instance = {
-  /** Component name, e.g. "Button" or "Button/Primary" for a variant. */
+  /** Node id, "Set/Variant" path, or set name (default variant). */
   component: z.string(),
   /** Component properties, by the name Figma shows (without its id suffix). */
   properties: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),

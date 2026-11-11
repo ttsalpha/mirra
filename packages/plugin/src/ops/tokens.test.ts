@@ -1,6 +1,6 @@
 import { beforeEach, expect, test } from "vitest";
 import type { UINode } from "@mirra/schema";
-import { buildNode } from "../figma/build";
+import { buildNode, resetComponentCatalog } from "../figma/build";
 import { installFakeFigma } from "../figma/fake-figma";
 import { readNode } from "../figma/read";
 import { buildNameIndex } from "../figma/tokens";
@@ -11,6 +11,7 @@ let fake: ReturnType<typeof installFakeFigma>;
 
 beforeEach(() => {
   fake = installFakeFigma();
+  resetComponentCatalog();
   fake.collections = [
     {
       id: "c1",
@@ -145,8 +146,61 @@ test("a missing component says what is on the page", async () => {
   fake.addComponent("Button");
 
   await expect(build({ type: "instance", component: "Card" })).rejects.toThrow(
-    /No component named "Card" on this page\. Found: Button/,
+    /No component named "Card" in this file\. Found: Button/,
   );
+});
+
+test("a component on another page is found", async () => {
+  const other = figma.createPage();
+  fake.addComponent("Button", other as never);
+
+  const node = await build({ type: "instance", component: "Button" });
+
+  expect(node.type).toBe("INSTANCE");
+});
+
+test("a set's name stands for its default variant", async () => {
+  fake.addComponentSet("Button", ["Variant=primary", "Variant=ghost"]);
+
+  const node = await build({ type: "instance", component: "Button" });
+
+  expect(node.name).toBe("Variant=primary");
+});
+
+test("a variant is still addressed by its full path", async () => {
+  fake.addComponentSet("Button", ["Variant=primary", "Variant=ghost"]);
+
+  const node = await build({ type: "instance", component: "Button/Variant=ghost" });
+
+  expect(node.name).toBe("Variant=ghost");
+});
+
+test("a set and a component sharing a name are ambiguous, not silently ranked", async () => {
+  fake.addComponent("Button");
+  fake.addComponentSet("Button", ["Variant=primary"]);
+
+  await expect(build({ type: "instance", component: "Button" })).rejects.toThrow(/ambiguous/);
+});
+
+test("a component named like an id is still found by name", async () => {
+  fake.addComponent("16:9");
+
+  expect((await build({ type: "instance", component: "16:9" })).type).toBe("INSTANCE");
+});
+
+test("a set with no variants says so", async () => {
+  fake.addComponentSet("Empty", []);
+
+  await expect(build({ type: "instance", component: "Empty" })).rejects.toThrow(/has no variants/);
+});
+
+test("a node id finds a component, and refuses anything else", async () => {
+  fake.addComponent("Button");
+  const id = (fake.page.children[0] as unknown as { id: string }).id;
+  const frame = await build({ type: "frame" });
+
+  expect((await build({ type: "instance", component: id })).type).toBe("INSTANCE");
+  await expect(build({ type: "instance", component: frame.id })).rejects.toThrow(/not a component/);
 });
 
 test("a node the DSL cannot express is counted once, not twice", async () => {
